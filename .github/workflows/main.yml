@@ -1,0 +1,179 @@
+name: 🔥 HEAVY RDP - Full Power Use
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Hours to keep running'
+        type: number
+        default: 6
+
+jobs:
+  heavy-rdp:
+    runs-on: windows-latest
+    timeout-minutes: 43200
+
+    steps:
+      # ============================================
+      # STEP 1: System Info
+      # ============================================
+      - name: System Information
+        shell: pwsh
+        run: |
+          Write-Host "========================================="
+          Write-Host "⚡ SYSTEM SPECIFICATIONS"
+          Write-Host "========================================="
+          
+          $cpu = Get-WmiObject -Class Win32_Processor
+          Write-Host "CPU: $($cpu.Name)"
+          Write-Host "Cores: $($cpu.NumberOfCores)"
+          Write-Host "RAM: $([math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB,2)) GB"
+
+      # ============================================
+      # STEP 2: Enable RDP
+      # ============================================
+      - name: Enable RDP
+        shell: pwsh
+        run: |
+          Write-Host "🔧 Enabling RDP..."
+          
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          
+          netsh advfirewall firewall delete rule name="RDP-Heavy" 2>$null
+          netsh advfirewall firewall add rule name="RDP-Heavy" dir=in action=allow protocol=TCP localport=3389
+          
+          Restart-Service -Name TermService -Force
+          Write-Host "✅ RDP Enabled"
+
+      # ============================================
+      # STEP 3: Create User
+      # ============================================
+      - name: Create User
+        shell: pwsh
+        run: |
+          Write-Host "👤 Creating user..."
+          
+          $password = "HeavyRDP@2024#" + (Get-Random -Minimum 1000 -Maximum 9999)
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+          
+          if (Get-LocalUser -Name "HeavyUser" -ErrorAction SilentlyContinue) {
+            Remove-LocalUser -Name "HeavyUser" -Force
+          }
+          
+          New-LocalUser -Name "HeavyUser" -Password $securePass -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "HeavyUser"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "HeavyUser"
+          
+          echo "RDP_USER=HeavyUser" >> $env:GITHUB_ENV
+          echo "RDP_PASSWORD=$password" >> $env:GITHUB_ENV
+          
+          Write-Host "✅ User created"
+
+      # ============================================
+      # STEP 4: Install Tailscale
+      # ============================================
+      - name: Install Tailscale
+        shell: pwsh
+        run: |
+          Write-Host "📥 Installing Tailscale..."
+          
+          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installer = "$env:TEMP\tailscale.msi"
+          
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          Start-Process msiexec.exe -ArgumentList "/i `"$installer`" /quiet /norestart" -Wait
+          Remove-Item $installer -Force
+          
+          Write-Host "✅ Tailscale installed"
+
+      # ============================================
+      # STEP 5: Connect Tailscale (CRITICAL)
+      # ============================================
+      - name: Connect Tailscale
+        shell: pwsh
+        run: |
+          Write-Host "🔗 Connecting to Tailscale..."
+          
+          $AUTH_KEY = "${{ secrets.TAILSCALE_AUTH_KEY }}"
+          
+          # ✅ CHECK: Agar auth key nahi hai toh error dikhao
+          if ([string]::IsNullOrEmpty($AUTH_KEY)) {
+            Write-Host "❌ ERROR: TAILSCALE_AUTH_KEY is not set in GitHub Secrets!"
+            Write-Host ""
+            Write-Host "📝 How to fix:"
+            Write-Host "1. Go to https://login.tailscale.com/admin/settings/keys"
+            Write-Host "2. Generate a new auth key (Reusable + Ephemeral)"
+            Write-Host "3. Add it as a GitHub Secret:"
+            Write-Host "   Settings → Secrets → New secret"
+            Write-Host "   Name: TAILSCALE_AUTH_KEY"
+            Write-Host "   Value: tskey-auth-xxxxx"
+            Write-Host ""
+            exit 1
+          }
+          
+          $tailscale = "C:\Program Files\Tailscale\tailscale.exe"
+          
+          # Connect
+          & $tailscale up --authkey=$AUTH_KEY --hostname=heavy-rdp --accept-routes
+          
+          # Get IP
+          $ip = $null
+          $retries = 0
+          while (-not $ip -and $retries -lt 20) {
+            Start-Sleep -Seconds 3
+            $ip = & $tailscale ip -4 2>$null
+            $retries++
+          }
+          
+          if ($ip) {
+            echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
+            Write-Host "✅ Connected! IP: $ip"
+          } else {
+            Write-Host "❌ Failed to get IP"
+            & $tailscale status
+            exit 1
+          }
+
+      # ============================================
+      # STEP 6: Show Connection Info
+      # ============================================
+      - name: Show Connection Info
+        shell: pwsh
+        run: |
+          Write-Host ""
+          Write-Host "========================================="
+          Write-Host "🔥 HEAVY RDP - CONNECTION INFO"
+          Write-Host "========================================="
+          Write-Host ""
+          Write-Host "📡 TAILSCALE IP: $env:TAILSCALE_IP"
+          Write-Host "👤 USERNAME: HeavyUser"
+          Write-Host "🔑 PASSWORD: $env:RDP_PASSWORD"
+          Write-Host ""
+          Write-Host "========================================="
+          Write-Host "📝 HOW TO CONNECT:"
+          Write-Host "========================================="
+          Write-Host "1. Install Tailscale on your PC"
+          Write-Host "2. Open Remote Desktop Connection"
+          Write-Host "3. Computer: $env:TAILSCALE_IP"
+          Write-Host "4. Username: HeavyUser"
+          Write-Host "5. Password: $env:RDP_PASSWORD"
+          Write-Host "========================================="
+
+      # ============================================
+      # STEP 7: Keep Alive
+      # ============================================
+      - name: Keep Alive
+        shell: pwsh
+        run: |
+          Write-Host "🔄 Keeping runner alive..."
+          
+          $endTime = (Get-Date).AddHours(${{ github.event.inputs.duration }})
+          $count = 0
+          
+          while ((Get-Date) -lt $endTime) {
+            $count++
+            Write-Host "[$count] 🔥 RDP Active - IP: $env:TAILSCALE_IP"
+            Write-Host "    Press Ctrl+C to stop"
+            Start-Sleep -Seconds 60
+          }
