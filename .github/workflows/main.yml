@@ -62,18 +62,17 @@ jobs:
           Write-Host "✅ Ultra RDP Configured!"
 
       # ============================================
-      # STEP 3: CREATE USER - FIXED
+      # STEP 3: CREATE USER - FIXED (No System.Web)
       # ============================================
       - name: Create Ultra User
         shell: pwsh
         run: |
           Write-Host "👤 Creating Ultra User..."
           
-          # ✅ FIX: Load assembly first
-          Add-Type -AssemblyName System.Web
+          # ✅ FIX: Simple password generator (no System.Web required)
+          $charSet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+'
+          $password = -join ((1..20) | ForEach { Get-Random -Maximum $charSet.Length | ForEach-Object { $charSet[$_] } })
           
-          # Generate strong password
-          $password = [System.Web.Security.Membership]::GeneratePassword(20, 4)
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
           
           if (Get-LocalUser -Name "UltraUser" -ErrorAction SilentlyContinue) {
@@ -120,10 +119,10 @@ jobs:
           choco install wireshark nmap putty filezilla -y
           
           # Media
-          choco install ffmpeg vlc gimp -y
+          choco install ffmpeg vlc -y
           
           # System
-          choco install cpu-z gpu-z hwinfo everything -y
+          choco install cpu-z gpu-z everything -y
           
           Write-Host "✅ Heavy Tools installed!"
 
