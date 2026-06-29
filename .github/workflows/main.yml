@@ -1,4 +1,4 @@
-name: 🔥 HEAVY RDP - Full Power Use
+name: 🔥 ULTRA HEAVY RDP - Full Power
 
 on:
   workflow_dispatch:
@@ -7,71 +7,192 @@ on:
         description: 'Hours to keep running'
         type: number
         default: 6
+      cpu_cores:
+        description: 'CPU cores to use'
+        type: choice
+        options:
+          - '2'
+          - '4'
+        default: '4'
+      install_heavy_tools:
+        description: 'Install heavy tools (VS, Docker, Python, Node, etc.)'
+        type: boolean
+        default: true
 
 jobs:
-  heavy-rdp:
+  ultra-heavy-rdp:
     runs-on: windows-latest
     timeout-minutes: 43200
 
     steps:
       # ============================================
-      # STEP 1: System Info
+      # STEP 1: SYSTEM INFO - ULTRA DETAILED
       # ============================================
       - name: System Information
         shell: pwsh
         run: |
           Write-Host "========================================="
-          Write-Host "⚡ SYSTEM SPECIFICATIONS"
+          Write-Host "⚡ ULTRA HEAVY SYSTEM SPECIFICATIONS"
           Write-Host "========================================="
           
+          # CPU Info
           $cpu = Get-WmiObject -Class Win32_Processor
-          Write-Host "CPU: $($cpu.Name)"
-          Write-Host "Cores: $($cpu.NumberOfCores)"
-          Write-Host "RAM: $([math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB,2)) GB"
+          Write-Host ""
+          Write-Host "🖥️ CPU: $($cpu.Name)"
+          Write-Host "   Cores: $($cpu.NumberOfCores)"
+          Write-Host "   Threads: $($cpu.NumberOfLogicalProcessors)"
+          Write-Host "   Max Clock: $($cpu.MaxClockSpeed) MHz"
+          
+          # RAM Info
+          $os = Get-WmiObject -Class Win32_ComputerSystem
+          $ramGB = [math]::Round($os.TotalPhysicalMemory / 1GB, 2)
+          Write-Host ""
+          Write-Host "📊 RAM: $ramGB GB"
+          
+          # Disk Info
+          $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
+          $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+          $totalGB = [math]::Round($disk.Size / 1GB, 2)
+          Write-Host "   Free: $freeGB GB / Total: $totalGB GB"
+          
+          # GPU Info
+          $gpu = Get-WmiObject -Class Win32_VideoController
+          Write-Host ""
+          Write-Host "🎮 GPU: $($gpu.Name)"
+          if ($gpu.AdapterRAM) {
+            $gpuRAM = [math]::Round($gpu.AdapterRAM / 1GB, 2)
+            Write-Host "   VRAM: $gpuRAM GB"
+          }
+          
+          # OS Info
+          $os = Get-WmiObject -Class Win32_OperatingSystem
+          Write-Host ""
+          Write-Host "💿 OS: $($os.Caption) $($os.OSArchitecture)"
+          Write-Host "   Build: $($os.BuildNumber)"
+          
+          Write-Host ""
+          Write-Host "========================================="
+          Write-Host "🔥 SYSTEM READY FOR HEAVY WORKLOAD!"
+          Write-Host "========================================="
 
       # ============================================
-      # STEP 2: Enable RDP
+      # STEP 2: ULTRA HEAVY RDP CONFIG
       # ============================================
-      - name: Enable RDP
+      - name: Enable Ultra RDP
         shell: pwsh
         run: |
-          Write-Host "🔧 Enabling RDP..."
+          Write-Host "🔧 Configuring Ultra Heavy RDP..."
           
+          # Enable RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
           
-          netsh advfirewall firewall delete rule name="RDP-Heavy" 2>$null
-          netsh advfirewall firewall add rule name="RDP-Heavy" dir=in action=allow protocol=TCP localport=3389
+          # Max performance settings
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 10 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionCount" -Value 10 -Force
+          
+          # Firewall
+          netsh advfirewall firewall delete rule name="RDP-Ultra" 2>$null
+          netsh advfirewall firewall add rule name="RDP-Ultra" dir=in action=allow protocol=TCP localport=3389
+          
+          # Disable all power saving
+          powercfg -change -standby-timeout-ac 0
+          powercfg -change -hibernate-timeout-ac 0
+          powercfg -change -monitor-timeout-ac 0
+          
+          # High performance power plan
+          powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
           
           Restart-Service -Name TermService -Force
-          Write-Host "✅ RDP Enabled"
+          Write-Host "✅ Ultra RDP Configured!"
 
       # ============================================
-      # STEP 3: Create User
+      # STEP 3: CREATE ADMIN USER
       # ============================================
-      - name: Create User
+      - name: Create Ultra User
         shell: pwsh
         run: |
-          Write-Host "👤 Creating user..."
+          Write-Host "👤 Creating Ultra User..."
           
-          $password = "HeavyRDP@2024#" + (Get-Random -Minimum 1000 -Maximum 9999)
+          # Ultra strong password
+          Add-Type -AssemblyName System.Web
+          $password = [System.Web.Security.Membership]::GeneratePassword(24, 6)
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
           
-          if (Get-LocalUser -Name "HeavyUser" -ErrorAction SilentlyContinue) {
-            Remove-LocalUser -Name "HeavyUser" -Force
+          if (Get-LocalUser -Name "UltraUser" -ErrorAction SilentlyContinue) {
+            Remove-LocalUser -Name "UltraUser" -Force
           }
           
-          New-LocalUser -Name "HeavyUser" -Password $securePass -AccountNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member "HeavyUser"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "HeavyUser"
+          New-LocalUser -Name "UltraUser" -Password $securePass -AccountNeverExpires -FullName "Ultra Heavy User"
+          Add-LocalGroupMember -Group "Administrators" -Member "UltraUser"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "UltraUser"
+          Add-LocalGroupMember -Group "Performance Log Users" -Member "UltraUser"
           
-          echo "RDP_USER=HeavyUser" >> $env:GITHUB_ENV
+          echo "RDP_USER=UltraUser" >> $env:GITHUB_ENV
           echo "RDP_PASSWORD=$password" >> $env:GITHUB_ENV
           
-          Write-Host "✅ User created"
+          Write-Host "✅ Ultra User created"
 
       # ============================================
-      # STEP 4: Install Tailscale
+      # STEP 4: INSTALL ULTRA HEAVY TOOLS
+      # ============================================
+      - name: Install Ultra Heavy Tools
+        if: github.event.inputs.install_heavy_tools == 'true'
+        shell: pwsh
+        run: |
+          Write-Host "📦 Installing Chocolatey..."
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          
+          Write-Host "📦 Installing ULTRA HEAVY tools..."
+          
+          # Development Tools
+          choco install vscode -y
+          choco install git -y
+          choco install python -y
+          choco install nodejs -y
+          choco install openjdk21 -y
+          choco install docker-desktop -y
+          choco install kubernetes-helm -y
+          
+          # Heavy IDEs
+          choco install visualstudio2022community -y
+          choco install intellijidea-community -y
+          
+          # Database Tools
+          choco install mysql -y
+          choco install postgresql -y
+          choco install mongodb -y
+          
+          # Networking Tools
+          choco install wireshark -y
+          choco install nmap -y
+          choco install putty -y
+          choco install filezilla -y
+          
+          # Media Tools
+          choco install ffmpeg -y
+          choco install vlc -y
+          choco install gimp -y
+          choco install blender -y
+          
+          # Gaming / Streaming
+          choco install obs-studio -y
+          choco install steam -y
+          choco install discord -y
+          
+          # System Tools
+          choco install cpu-z -y
+          choco install gpu-z -y
+          choco install hwinfo -y
+          choco install crystaldiskmark -y
+          choco install everything -y
+          
+          Write-Host "✅ All Ultra Heavy tools installed!"
+
+      # ============================================
+      # STEP 5: INSTALL TAILSCALE
       # ============================================
       - name: Install Tailscale
         shell: pwsh
@@ -88,7 +209,7 @@ jobs:
           Write-Host "✅ Tailscale installed"
 
       # ============================================
-      # STEP 5: Connect Tailscale (CRITICAL)
+      # STEP 6: CONNECT TAILSCALE
       # ============================================
       - name: Connect Tailscale
         shell: pwsh
@@ -97,7 +218,6 @@ jobs:
           
           $AUTH_KEY = "${{ secrets.TAILSCALE_AUTH_KEY }}"
           
-          # ✅ CHECK: Agar auth key nahi hai toh error dikhao
           if ([string]::IsNullOrEmpty($AUTH_KEY)) {
             Write-Host "❌ ERROR: TAILSCALE_AUTH_KEY is not set in GitHub Secrets!"
             Write-Host ""
@@ -114,10 +234,8 @@ jobs:
           
           $tailscale = "C:\Program Files\Tailscale\tailscale.exe"
           
-          # Connect
-          & $tailscale up --authkey=$AUTH_KEY --hostname=heavy-rdp --accept-routes
+          & $tailscale up --authkey=$AUTH_KEY --hostname=ultra-heavy-rdp --accept-routes --accept-dns
           
-          # Get IP
           $ip = $null
           $retries = 0
           while (-not $ip -and $retries -lt 20) {
@@ -136,18 +254,60 @@ jobs:
           }
 
       # ============================================
-      # STEP 6: Show Connection Info
+      # STEP 7: ULTRA HEAVY MINECRAFT SERVER
       # ============================================
-      - name: Show Connection Info
+      - name: Download Ultra Minecraft Server
+        shell: pwsh
+        run: |
+          Write-Host "🎮 Downloading Ultra Minecraft Server..."
+          
+          New-Item -ItemType Directory -Path "C:\UltraMinecraft" -Force
+          cd C:\UltraMinecraft
+          
+          # Download latest Paper
+          Invoke-WebRequest -Uri "https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds/72/downloads/paper-1.21.4-72.jar" -OutFile "server.jar"
+          
+          # EULA
+          "eula=true" | Out-File -FilePath "eula.txt" -Encoding utf8
+          
+          # Ultra server.properties
+          @"
+          server-port=25565
+          max-players=100
+          view-distance=16
+          simulation-distance=12
+          gamemode=0
+          difficulty=3
+          spawn-protection=16
+          online-mode=false
+          allow-flight=true
+          allow-nether=true
+          allow-end=true
+          level-name=ultra-world
+          motd=🔥 ULTRA HEAVY MINECRAFT SERVER! 🔥
+          enable-query=true
+          enable-rcon=true
+          rcon-password=ultraheavy2024
+          rcon-port=25575
+          max-tick-time=60000
+          network-compression-threshold=256
+          "@ | Out-File -FilePath "server.properties" -Encoding utf8
+          
+          Write-Host "✅ Ultra Minecraft Server ready!"
+
+      # ============================================
+      # STEP 8: SHOW ULTRA CONNECTION INFO
+      # ============================================
+      - name: Show Ultra Connection Info
         shell: pwsh
         run: |
           Write-Host ""
           Write-Host "========================================="
-          Write-Host "🔥 HEAVY RDP - CONNECTION INFO"
+          Write-Host "🔥 ULTRA HEAVY RDP - CONNECTION INFO"
           Write-Host "========================================="
           Write-Host ""
           Write-Host "📡 TAILSCALE IP: $env:TAILSCALE_IP"
-          Write-Host "👤 USERNAME: HeavyUser"
+          Write-Host "👤 USERNAME: UltraUser"
           Write-Host "🔑 PASSWORD: $env:RDP_PASSWORD"
           Write-Host ""
           Write-Host "========================================="
@@ -156,24 +316,44 @@ jobs:
           Write-Host "1. Install Tailscale on your PC"
           Write-Host "2. Open Remote Desktop Connection"
           Write-Host "3. Computer: $env:TAILSCALE_IP"
-          Write-Host "4. Username: HeavyUser"
+          Write-Host "4. Username: UltraUser"
           Write-Host "5. Password: $env:RDP_PASSWORD"
+          Write-Host ""
+          Write-Host "🎮 ULTRA MINECRAFT SERVER:"
+          Write-Host "   C:\UltraMinecraft"
+          Write-Host "   java -Xmx12G -Xms4G -jar server.jar nogui"
+          Write-Host ""
+          Write-Host "⚡ SYSTEM POWER:"
+          Write-Host "   CPU: $(Get-WmiObject Win32_Processor).Name"
+          Write-Host "   RAM: $([math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB,2)) GB"
+          Write-Host "   Tools: VS Code, Docker, Python, Node, Java, etc."
           Write-Host "========================================="
 
       # ============================================
-      # STEP 7: Keep Alive
+      # STEP 9: ULTRA KEEP ALIVE
       # ============================================
-      - name: Keep Alive
+      - name: Ultra Keep Alive
         shell: pwsh
         run: |
-          Write-Host "🔄 Keeping runner alive..."
+          Write-Host "🔄 Keeping ULTRA HEAVY runner alive..."
           
           $endTime = (Get-Date).AddHours(${{ github.event.inputs.duration }})
           $count = 0
           
           while ((Get-Date) -lt $endTime) {
             $count++
-            Write-Host "[$count] 🔥 RDP Active - IP: $env:TAILSCALE_IP"
-            Write-Host "    Press Ctrl+C to stop"
-            Start-Sleep -Seconds 60
+            $cpu = Get-WmiObject -Class Win32_Processor
+            $ram = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
+            
+            Write-Host ""
+            Write-Host "[$count] 🔥 ULTRA HEAVY RDP ACTIVE"
+            Write-Host "   📡 IP: $env:TAILSCALE_IP"
+            Write-Host "   🖥️ CPU: $($cpu.Name)"
+            Write-Host "   📊 RAM: $ram GB"
+            Write-Host "   ⏱️ Time: $(Get-Date -Format 'HH:mm:ss')"
+            Write-Host "   💤 Press Ctrl+C to stop"
+            Write-Host ""
+            Start-Sleep -Seconds 300
           }
+          
+          Write-Host "⏰ Time's up! Runner will stop."
