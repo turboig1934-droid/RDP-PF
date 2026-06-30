@@ -1,367 +1,142 @@
-name: 🔥 ULTRA MAXIMUM RDP - 150GB Edition
+name: RDP
 
 on:
   workflow_dispatch:
     inputs:
       duration:
-        description: 'Hours to keep running (Max 24)'
+        description: 'Hours'
         type: number
-        default: 12
-        minimum: 1
-        maximum: 24
-      install_heavy_tools:
-        description: 'Install heavy tools (VS, Docker, Python, Node, etc.)'
-        type: boolean
-        default: true
+        default: 6
 
 jobs:
-  ultra-max-rdp:
+  rdp:
     runs-on: windows-latest
     timeout-minutes: 43200
 
     steps:
       # ============================================
-      # STEP 1: SYSTEM INFO
+      # SYSTEM INFO
       # ============================================
-      - name: 🖥️ System Information
+      - name: System Info
         shell: pwsh
         run: |
           Write-Host "========================================="
-          Write-Host "🔥 ULTRA MAXIMUM SYSTEM SPECIFICATIONS"
+          Write-Host "SYSTEM SPECIFICATIONS"
           Write-Host "========================================="
-          
           $cpu = Get-WmiObject -Class Win32_Processor
-          Write-Host "🖥️ CPU: $($cpu.Name)"
-          Write-Host "   Cores: $($cpu.NumberOfCores)"
-          Write-Host "   Threads: $($cpu.NumberOfLogicalProcessors)"
-          
-          $ram = Get-WmiObject Win32_ComputerSystem
-          $ramGB = [math]::Round($ram.TotalPhysicalMemory/1GB, 2)
-          Write-Host "📊 Total RAM: $ramGB GB"
-          
+          Write-Host "CPU: $($cpu.Name)"
+          Write-Host "Cores: $($cpu.NumberOfCores)"
+          $ram = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB, 2)
+          Write-Host "RAM: $ram GB"
           $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
-          $totalGB = [math]::Round($disk.Size / 1GB, 2)
-          $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-          Write-Host "💾 Total Disk: $totalGB GB"
-          Write-Host "💾 Free Space: $freeGB GB"
-          
-          Write-Host "========================================="
-          Write-Host "⚠️ DISK IS ALREADY AT MAXIMUM SIZE (150GB)"
-          Write-Host "   Expanding not possible on GitHub Runners"
+          Write-Host "Free Disk: $([math]::Round($disk.FreeSpace/1GB, 2)) GB"
           Write-Host "========================================="
 
       # ============================================
-      # STEP 2: FREE UP MAXIMUM SPACE
+      # ENABLE RDP
       # ============================================
-      - name: 💾 Free Up Maximum Space
+      - name: Enable RDP
         shell: pwsh
         run: |
-          Write-Host "========================================="
-          Write-Host "💾 FREEING UP MAXIMUM DISK SPACE"
-          Write-Host "========================================="
-          
-          # Show current space
-          $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
-          $beforeFree = [math]::Round($disk.FreeSpace / 1GB, 2)
-          Write-Host "📊 Before Cleanup: $beforeFree GB free"
-          
-          # Clean Windows temp files
-          Write-Host "🧹 Cleaning Windows temp files..."
-          Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\*\AppData\Local\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
-          # Clean Windows Update cache
-          Write-Host "🧹 Cleaning Windows Update cache..."
-          Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Start-Service -Name wuauserv -ErrorAction SilentlyContinue
-          
-          # Clean WinSxS backups
-          Write-Host "🧹 Cleaning WinSxS backups..."
-          dism /online /Cleanup-Image /StartComponentCleanup /ResetBase | Out-Null
-          
-          # Remove pre-installed bloatware
-          Write-Host "🧹 Removing bloatware apps..."
-          Get-AppxPackage -AllUsers | Where-Object {$_.Name -match "Bing|Xbox|OneConnect|People|Skype|Solitaire|Spotify|StickyNotes|Tips|WindowsMaps|ZuneMusic|ZuneVideo|Microsoft.Microsoft3DViewer|Microsoft.MicrosoftOfficeHub|Microsoft.MicrosoftSolitaireCollection|Microsoft.MinecraftUWP|Microsoft.GetHelp|Microsoft.Getstarted|Microsoft.Messaging|Microsoft.WindowsAlarms|Microsoft.WindowsCalculator|Microsoft.WindowsCamera|Microsoft.WindowsFeedbackHub|Microsoft.WindowsMaps|Microsoft.WindowsSoundRecorder|Microsoft.YourPhone"} | Remove-AppxPackage -ErrorAction SilentlyContinue
-          
-          # Clean up Windows features
-          Write-Host "🧹 Disabling unnecessary Windows features..."
-          Disable-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64" -Remove -ErrorAction SilentlyContinue
-          Disable-WindowsOptionalFeature -Online -FeatureName "WindowsMediaPlayer" -Remove -ErrorAction SilentlyContinue
-          
-          # Show after cleanup
-          $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
-          $afterFree = [math]::Round($disk.FreeSpace / 1GB, 2)
-          $freed = $afterFree - $beforeFree
-          Write-Host "✅ After Cleanup: $afterFree GB free"
-          Write-Host "✅ Freed Space: $freed GB"
-
-      # ============================================
-      # STEP 3: ENABLE RDP
-      # ============================================
-      - name: ⚡ Enable Maximum Performance RDP
-        shell: pwsh
-        run: |
-          Write-Host "⚡ Configuring Maximum Performance RDP..."
-          
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-          
-          netsh advfirewall firewall delete rule name="RDP-Max" 2>$null
-          netsh advfirewall firewall add rule name="RDP-Max" dir=in action=allow protocol=TCP localport=3389
-          
+          netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
           powercfg -change -standby-timeout-ac 0
-          powercfg -change -hibernate-timeout-ac 0
-          
           Restart-Service -Name TermService -Force
-          Write-Host "✅ RDP Configured!"
+          Write-Host "RDP Enabled"
 
       # ============================================
-      # STEP 4: CREATE USER
+      # CREATE USER
       # ============================================
-      - name: 👤 Create Ultra Administrator
+      - name: Create User
         shell: pwsh
         run: |
-          Write-Host "👤 Creating Ultra Administrator User..."
-          
-          $charSet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+{}[]|;:<>,.?/'
-          $password = -join ((1..32) | ForEach { Get-Random -Maximum $charSet.Length | ForEach-Object { $charSet[$_] } })
-          
+          $password = "Admin@123#" + (Get-Random -Maximum 999)
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-          
-          if (Get-LocalUser -Name "UltraUser" -ErrorAction SilentlyContinue) {
-            Remove-LocalUser -Name "UltraUser" -Force
-          }
-          
-          New-LocalUser -Name "UltraUser" -Password $securePass -AccountNeverExpires -FullName "Ultra Max User"
-          Add-LocalGroupMember -Group "Administrators" -Member "UltraUser"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "UltraUser"
-          
-          echo "RDP_USER=UltraUser" >> $env:GITHUB_ENV
-          echo "RDP_PASSWORD=$password" >> $env:GITHUB_ENV
-          
-          Write-Host "✅ Ultra User created"
+          New-LocalUser -Name "Admin" -Password $securePass -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "Admin"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "Admin"
+          echo "USER=Admin" >> $env:GITHUB_ENV
+          echo "PASS=$password" >> $env:GITHUB_ENV
+          Write-Host "User Created"
 
       # ============================================
-      # STEP 5: INSTALL CHOCOLATEY
+      # INSTALL CHOCOLATEY
       # ============================================
-      - name: 📦 Install Chocolatey
+      - name: Install Chocolatey
         shell: pwsh
         run: |
-          Write-Host "📦 Installing Chocolatey..."
           Set-ExecutionPolicy Bypass -Scope Process -Force
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          [System.Net.ServicePointManager]::SecurityProtocol = 3072
           iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-          Write-Host "✅ Chocolatey installed"
+          Write-Host "Chocolatey Installed"
 
       # ============================================
-      # STEP 6: INSTALL TOOLS (Space Optimized)
+      # INSTALL TOOLS (Optional)
       # ============================================
-      - name: 📦 Install Optimized Tools
-        if: github.event.inputs.install_heavy_tools == 'true'
+      - name: Install Tools
         shell: pwsh
         run: |
-          Write-Host "========================================="
-          Write-Host "📦 INSTALLING OPTIMIZED TOOLS"
-          Write-Host "========================================="
-          
-          # Check available space
-          $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
-          $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-          Write-Host "💾 Available Space: $freeGB GB"
-          
-          if ($freeGB -lt 25) {
-            Write-Host "⚠️ Low space! Installing minimal tools..."
-            
-            # MINIMAL TOOLS (Under 5GB)
-            choco install vscode git python312 nodejs-lts -y
-            choco install googlechrome firefox -y
-            choco install 7zip notepadplusplus -y
-            
-            Write-Host "✅ Minimal tools installed!"
-            
-          } elseif ($freeGB -lt 50) {
-            Write-Host "📦 Medium space! Installing medium tools..."
-            
-            # MEDIUM TOOLS (Under 15GB)
-            choco install vscode git python312 nodejs-lts -y
-            choco install openjdk21 dotnet-8.0-sdk -y
-            choco install mysql docker-desktop -y
-            choco install googlechrome firefox -y
-            choco install 7zip notepadplusplus everything filezilla putty -y
-            
-            # Python packages
-            python -m pip install --upgrade pip
-            python -m pip install numpy pandas matplotlib jupyterlab
-            
-            Write-Host "✅ Medium tools installed!"
-            
-          } else {
-            Write-Host "✅ Sufficient space! Installing full tools..."
-            
-            # FULL TOOLS (Under 30GB)
-            # Development
-            choco install vscode git python312 nodejs-lts -y
-            choco install openjdk21 dotnet-8.0-sdk maven gradle -y
-            
-            # Databases
-            choco install mysql postgresql mongodb redis -y
-            
-            # DevOps
-            choco install docker-desktop kubernetes-helm kubectl -y
-            
-            # Tools
-            choco install googlechrome firefox -y
-            choco install 7zip notepadplusplus everything filezilla putty wireshark -y
-            choco install github-desktop azure-cli awscli -y
-            
-            # Python packages
-            python -m pip install --upgrade pip
-            python -m pip install numpy pandas matplotlib scipy tensorflow torch jupyterlab
-            python -m pip install django flask fastapi
-            
-            # Node packages
-            npm install -g yarn typescript @angular/cli create-react-app next
-            
-            Write-Host "✅ Full tools installed!"
-          }
-          
-          # Show disk usage after installation
-          $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
-          $usedGB = [math]::Round(($disk.Size - $disk.FreeSpace) / 1GB, 2)
-          $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-          Write-Host ""
-          Write-Host "📊 FINAL DISK USAGE:"
-          Write-Host "   Used: $usedGB GB"
-          Write-Host "   Free: $freeGB GB"
-          Write-Host "   Total: $([math]::Round($disk.Size/1GB, 2)) GB"
+          choco install vscode git python googlechrome 7zip -y
+          Write-Host "Tools Installed"
 
       # ============================================
-      # STEP 7: INSTALL TAILSCALE
+      # INSTALL TAILSCALE
       # ============================================
-      - name: 📡 Install Tailscale
+      - name: Install Tailscale
         shell: pwsh
         run: |
-          Write-Host "📥 Installing Tailscale..."
-          
           $url = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $installer = "$env:TEMP\tailscale.msi"
-          
           Invoke-WebRequest -Uri $url -OutFile $installer
           Start-Process msiexec.exe -ArgumentList "/i `"$installer`" /quiet /norestart" -Wait
           Remove-Item $installer -Force
-          
-          Write-Host "✅ Tailscale installed"
+          Write-Host "Tailscale Installed"
 
       # ============================================
-      # STEP 8: CONNECT TAILSCALE
+      # CONNECT TAILSCALE
       # ============================================
-      - name: 🔗 Connect Tailscale
+      - name: Connect Tailscale
         shell: pwsh
         run: |
-          Write-Host "🔗 Connecting to Tailscale..."
-          
           $AUTH_KEY = "${{ secrets.TAILSCALE_AUTH_KEY }}"
-          
           if ([string]::IsNullOrEmpty($AUTH_KEY)) {
-            Write-Host "❌ ERROR: TAILSCALE_AUTH_KEY is not set in GitHub Secrets!"
-            Write-Host ""
-            Write-Host "📝 How to fix:"
-            Write-Host "1. Go to https://login.tailscale.com/admin/settings/keys"
-            Write-Host "2. Generate a new auth key (Reusable + Ephemeral)"
-            Write-Host "3. Add it as a GitHub Secret:"
-            Write-Host "   Settings → Secrets → New secret"
-            Write-Host "   Name: TAILSCALE_AUTH_KEY"
-            Write-Host "   Value: tskey-auth-xxxxx"
-            Write-Host ""
+            Write-Host "ERROR: TAILSCALE_AUTH_KEY not set!"
+            Write-Host "Add it in: Settings → Secrets → New secret"
             exit 1
           }
-          
           $tailscale = "C:\Program Files\Tailscale\tailscale.exe"
-          
-          & $tailscale up --authkey=$AUTH_KEY --hostname=ultra-max-rdp --accept-routes --accept-dns
-          
-          $ip = $null
-          $retries = 0
-          while (-not $ip -and $retries -lt 30) {
-            Start-Sleep -Seconds 3
-            $ip = & $tailscale ip -4 2>$null
-            $retries++
-          }
-          
-          if ($ip) {
-            echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
-            Write-Host "✅ Connected! IP: $ip"
-          } else {
-            Write-Host "❌ Failed to get IP"
-            & $tailscale status
-            exit 1
-          }
+          & $tailscale up --authkey=$AUTH_KEY --hostname=rdp-server --accept-routes
+          Start-Sleep -Seconds 10
+          $ip = & $tailscale ip -4
+          echo "IP=$ip" >> $env:GITHUB_ENV
+          Write-Host "Connected! IP: $ip"
 
       # ============================================
-      # STEP 9: SHOW CONNECTION INFO
+      # SHOW INFO
       # ============================================
-      - name: 📋 Show Connection Info
+      - name: Connection Info
         shell: pwsh
         run: |
-          $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
-          $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-          $totalGB = [math]::Round($disk.Size / 1GB, 2)
-          
           Write-Host ""
-          Write-Host "============================================================"
-          Write-Host "🔥 ULTRA MAXIMUM RDP - CONNECTION INFORMATION"
-          Write-Host "============================================================"
+          Write-Host "========================================="
+          Write-Host "RDP CONNECTION INFO"
+          Write-Host "========================================="
+          Write-Host "IP: $env:IP"
+          Write-Host "User: Admin"
+          Write-Host "Password: $env:PASS"
           Write-Host ""
-          Write-Host "📡 TAILSCALE IP: $env:TAILSCALE_IP"
-          Write-Host "👤 USERNAME: UltraUser"
-          Write-Host "🔑 PASSWORD: $env:RDP_PASSWORD"
-          Write-Host ""
-          Write-Host "💾 DISK: $freeGB GB free / $totalGB GB total"
-          Write-Host "⚡ STATUS: MAXIMUM PERFORMANCE"
-          Write-Host ""
-          Write-Host "============================================================"
-          Write-Host "📝 HOW TO CONNECT:"
-          Write-Host "============================================================"
-          Write-Host "1. Install Tailscale on your PC"
-          Write-Host "2. Open Remote Desktop Connection"
-          Write-Host "3. Computer: $env:TAILSCALE_IP"
-          Write-Host "4. Username: UltraUser"
-          Write-Host "5. Password: $env:RDP_PASSWORD"
-          Write-Host "============================================================"
+          Write-Host "Connect using Remote Desktop"
+          Write-Host "========================================="
 
       # ============================================
-      # STEP 10: KEEP ALIVE
+      # KEEP ALIVE
       # ============================================
-      - name: 🔄 Keep Alive
+      - name: Keep Alive
         shell: pwsh
         run: |
-          Write-Host "🔄 Keeping ULTRA MAXIMUM RDP alive..."
-          
           $endTime = (Get-Date).AddHours(${{ github.event.inputs.duration }})
-          $count = 0
-          
           while ((Get-Date) -lt $endTime) {
-            $count++
-            $ram = Get-WmiObject Win32_ComputerSystem
-            $ramUsed = [math]::Round(($ram.TotalPhysicalMemory - $ram.FreePhysicalMemory) / 1GB, 2)
-            $ramTotal = [math]::Round($ram.TotalPhysicalMemory / 1GB, 2)
-            
-            $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
-            $diskFree = [math]::Round($disk.FreeSpace / 1GB, 2)
-            $diskTotal = [math]::Round($disk.Size / 1GB, 2)
-            
-            Write-Host ""
-            Write-Host "============================================================"
-            Write-Host "[$count] 🔥 ULTRA MAXIMUM RDP ACTIVE"
-            Write-Host "============================================================"
-            Write-Host "   📡 IP: $env:TAILSCALE_IP"
-            Write-Host "   ⏱️ Time: $(Get-Date -Format 'HH:mm:ss')"
-            Write-Host "   📊 RAM: $ramUsed GB / $ramTotal GB used"
-            Write-Host "   💾 DISK: $diskFree GB / $diskTotal GB free"
-            Write-Host "============================================================"
-            Write-Host "   💤 Press Ctrl+C to stop"
-            Write-Host ""
-            
+            Write-Host "RDP Active - IP: $env:IP - Time: $(Get-Date -Format 'HH:mm:ss')"
             Start-Sleep -Seconds 60
           }
