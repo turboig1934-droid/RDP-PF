@@ -40,10 +40,6 @@ jobs:
           Write-Host ""
           Write-Host "💾 DISK: $freeGB GB Free / $totalGB GB Total"
           
-          $gpu = Get-WmiObject -Class Win32_VideoController
-          Write-Host ""
-          Write-Host "🎮 GPU: $($gpu.Name)"
-          
           Write-Host ""
           Write-Host "========================================="
 
@@ -151,8 +147,6 @@ jobs:
             Write-Host ""
             Write-Host "❌ ERROR: Invalid Tailscale key format!"
             Write-Host ""
-            Write-Host "Your key: $AUTH_KEY"
-            Write-Host ""
             Write-Host "📝 Correct format: tskey-auth-xxxxx"
             Write-Host ""
             Write-Host "Generate a new Auth Key (not API Key):"
@@ -190,7 +184,7 @@ jobs:
           }
 
       # ============================================
-      # STEP 6: SHOW CONNECTION INFO (MAIN IP DISPLAY)
+      # STEP 6: SHOW CONNECTION INFO
       # ============================================
       - name: 🔥 CONNECTION INFO - IP HERE
         shell: pwsh
