@@ -1,62 +1,348 @@
-name: RDP
+name: 🔥 ULTIMATE RDP - 16GB MAX POWER
 
 on:
   workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Hours to keep running (max 6)'
+        type: number
+        default: 6
+        maximum: 6
+      install_tools:
+        description: 'Install development tools?'
+        type: boolean
+        default: true
+      install_minecraft:
+        description: 'Setup Minecraft server?'
+        type: boolean
+        default: true
 
 jobs:
-  rdp:
+  ultimate-rdp:
     runs-on: windows-latest
-    timeout-minutes: 43200
+    timeout-minutes: 43200  # 30 hours max
 
     steps:
-      - name: System Info
+      # ============================================
+      # STEP 1: SYSTEM INFO - FULL DETAILS
+      # ============================================
+      - name: 🔍 System Information
+        shell: pwsh
         run: |
-          systeminfo | findstr /C:"OS Name"
-          systeminfo | findstr /C:"Total Physical Memory"
-          wmic cpu get name
-          wmic logicaldisk where "DeviceID='C:'" get Size,FreeSpace
+          Write-Host "========================================="
+          Write-Host "⚡ ULTIMATE SYSTEM SPECIFICATIONS"
+          Write-Host "========================================="
+          
+          # CPU
+          $cpu = Get-WmiObject -Class Win32_Processor
+          Write-Host ""
+          Write-Host "🖥️ CPU: $($cpu.Name)"
+          Write-Host "   🔢 Cores: $($cpu.NumberOfCores)"
+          Write-Host "   🧵 Threads: $($cpu.NumberOfLogicalProcessors)"
+          Write-Host "   ⚡ Max Speed: $($cpu.MaxClockSpeed) MHz"
+          
+          # RAM
+          $ramGB = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB, 2)
+          Write-Host ""
+          Write-Host "📊 RAM: $ramGB GB"
+          Write-Host "   🔹 Available: $([math]::Round((Get-WmiObject Win32_OperatingSystem).FreePhysicalMemory/1GB, 2)) GB"
+          
+          # Disk
+          $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
+          $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+          $totalGB = [math]::Round($disk.Size / 1GB, 2)
+          Write-Host ""
+          Write-Host "💾 DISK:"
+          Write-Host "   🔹 Total: $totalGB GB"
+          Write-Host "   🔹 Free: $freeGB GB"
+          
+          # GPU
+          $gpu = Get-WmiObject -Class Win32_VideoController
+          Write-Host ""
+          Write-Host "🎮 GPU: $($gpu.Name)"
+          if ($gpu.AdapterRAM) {
+            $gpuRAM = [math]::Round($gpu.AdapterRAM / 1GB, 2)
+            Write-Host "   🔹 VRAM: $gpuRAM GB"
+          }
+          
+          # OS
+          $os = Get-WmiObject -Class Win32_OperatingSystem
+          Write-Host ""
+          Write-Host "💿 OS: $($os.Caption)"
+          Write-Host "   🔹 Build: $($os.BuildNumber)"
+          Write-Host "   🔹 Architecture: $($os.OSArchitecture)"
+          
+          Write-Host ""
+          Write-Host "========================================="
+          Write-Host "🔥 ULTIMATE SYSTEM READY!"
+          Write-Host "========================================="
 
-      - name: Enable RDP
+      # ============================================
+      # STEP 2: ENABLE RDP WITH MAX SETTINGS
+      # ============================================
+      - name: 🔧 Enable Ultimate RDP
+        shell: pwsh
         run: |
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f
-          netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
-          wmic path win32_computersystem where name="%COMPUTERNAME%" set AutomaticManagedPagefile=True
+          Write-Host "🔧 Configuring Ultimate RDP..."
+          
+          # Enable RDP
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          
+          # Max connections
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 10 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionCount" -Value 10 -Force
+          
+          # Firewall
+          netsh advfirewall firewall delete rule name="RDP-Ultimate" 2>$null
+          netsh advfirewall firewall add rule name="RDP-Ultimate" dir=in action=allow protocol=TCP localport=3389
+          
+          # Disable all power saving
           powercfg -change -standby-timeout-ac 0
+          powercfg -change -hibernate-timeout-ac 0
+          powercfg -change -monitor-timeout-ac 0
+          
+          # High performance
+          powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+          
+          Restart-Service -Name TermService -Force
+          Write-Host "✅ Ultimate RDP Configured!"
 
-      - name: Create User
+      # ============================================
+      # STEP 3: CREATE ADMIN USER
+      # ============================================
+      - name: 👤 Create Admin User
+        shell: pwsh
         run: |
-          net user admin P@ssw0rd123! /add
-          net localgroup administrators admin /add
-          net localgroup "Remote Desktop Users" admin /add
-          echo "Username: admin"
-          echo "Password: P@ssw0rd123!"
+          Write-Host "👤 Creating Admin User..."
+          
+          # Strong password generator
+          $charSet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+'
+          $password = -join ((1..24) | ForEach { Get-Random -Maximum $charSet.Length | ForEach-Object { $charSet[$_] } })
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+          
+          # Remove existing
+          if (Get-LocalUser -Name "Admin" -ErrorAction SilentlyContinue) {
+            Remove-LocalUser -Name "Admin" -Force
+          }
+          
+          # Create user
+          New-LocalUser -Name "Admin" -Password $securePass -AccountNeverExpires -FullName "Ultimate Admin"
+          Add-LocalGroupMember -Group "Administrators" -Member "Admin"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "Admin"
+          
+          # Save credentials
+          echo "RDP_USER=Admin" >> $env:GITHUB_ENV
+          echo "RDP_PASSWORD=$password" >> $env:GITHUB_ENV
+          
+          Write-Host "✅ Admin User Created"
 
-      - name: Install Tailscale
+      # ============================================
+      # STEP 4: INSTALL CHOCOLATEY
+      # ============================================
+      - name: 📦 Install Chocolatey
+        shell: pwsh
         run: |
-          curl -L -o tailscale.msi https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi
-          msiexec /i tailscale.msi /quiet /norestart
-          del tailscale.msi
+          Write-Host "📦 Installing Chocolatey..."
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          Write-Host "✅ Chocolatey Installed"
 
-      - name: Connect Tailscale
+      # ============================================
+      # STEP 5: INSTALL ALL TOOLS
+      # ============================================
+      - name: 🛠️ Install Tools
+        if: github.event.inputs.install_tools == 'true'
+        shell: pwsh
         run: |
-          "%ProgramFiles%\Tailscale\tailscale.exe" up --authkey=%TAILSCALE_AUTH_KEY% --hostname=rdp
-          for /f "tokens=*" %%i in ('"%ProgramFiles%\Tailscale\tailscale.exe" ip -4') do set IP=%%i
-          echo IP=%IP%
+          Write-Host "🛠️ Installing Tools..."
+          
+          # Development
+          choco install vscode git python nodejs openjdk21 -y
+          
+          # Database
+          choco install mysql postgresql mongodb -y
+          
+          # Networking
+          choco install wireshark nmap putty filezilla -y
+          
+          # Media
+          choco install ffmpeg vlc -y
+          
+          # System
+          choco install cpu-z gpu-z everything -y
+          
+          Write-Host "✅ Tools Installed"
 
-      - name: Show Info
+      # ============================================
+      # STEP 6: MINECRAFT SERVER SETUP
+      # ============================================
+      - name: 🎮 Setup Minecraft Server
+        if: github.event.inputs.install_minecraft == 'true'
+        shell: pwsh
         run: |
-          echo =========================================
-          echo RDP CONNECTION INFO
-          echo =========================================
-          echo IP Address: %IP%
-          echo Username: admin
-          echo Password: P@ssw0rd123!
-          echo =========================================
+          Write-Host "🎮 Setting up Minecraft Server..."
+          
+          New-Item -ItemType Directory -Path "C:\Minecraft" -Force
+          cd C:\Minecraft
+          
+          # Download Paper
+          Invoke-WebRequest -Uri "https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds/72/downloads/paper-1.21.4-72.jar" -OutFile "server.jar"
+          
+          # EULA
+          "eula=true" | Out-File -FilePath "eula.txt" -Encoding utf8
+          
+          # Ultimate server.properties
+          @"
+          server-port=25565
+          max-players=100
+          view-distance=16
+          simulation-distance=12
+          gamemode=0
+          difficulty=3
+          spawn-protection=16
+          online-mode=false
+          allow-flight=true
+          allow-nether=true
+          allow-end=true
+          level-name=ultimate-world
+          motd=🔥 ULTIMATE MINECRAFT SERVER 🔥
+          enable-query=true
+          enable-rcon=true
+          rcon-password=Ultimate2024
+          rcon-port=25575
+          "@ | Out-File -FilePath "server.properties" -Encoding utf8
+          
+          # Start script
+          @"
+          @echo off
+          java -Xmx12G -Xms4G -jar server.jar nogui
+          pause
+          "@ | Out-File -FilePath "start.bat" -Encoding ascii
+          
+          Write-Host "✅ Minecraft Server Ready!"
+          Write-Host "   📂 C:\Minecraft"
+          Write-Host "   🚀 Run: start.bat"
 
-      - name: Keep Alive
+      # ============================================
+      # STEP 7: INSTALL TAILSCALE
+      # ============================================
+      - name: 📥 Install Tailscale
+        shell: pwsh
         run: |
-          for /L %%i in (1,1,1440) do (
-            echo RDP Active - %date% %time%
-            timeout /t 60 /nobreak >nul
-          )
+          Write-Host "📥 Installing Tailscale..."
+          
+          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installer = "$env:TEMP\tailscale.msi"
+          
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          Start-Process msiexec.exe -ArgumentList "/i `"$installer`" /quiet /norestart" -Wait
+          Remove-Item $installer -Force
+          
+          Write-Host "✅ Tailscale Installed"
+
+      # ============================================
+      # STEP 8: CONNECT TAILSCALE
+      # ============================================
+      - name: 🔗 Connect Tailscale
+        shell: pwsh
+        run: |
+          Write-Host "🔗 Connecting to Tailscale..."
+          
+          $AUTH_KEY = "${{ secrets.TAILSCALE_AUTH_KEY }}"
+          
+          if ([string]::IsNullOrEmpty($AUTH_KEY)) {
+            Write-Host "❌ TAILSCALE_AUTH_KEY not set in GitHub Secrets!"
+            Write-Host ""
+            Write-Host "📝 How to fix:"
+            Write-Host "1. https://login.tailscale.com/admin/settings/keys"
+            Write-Host "2. Generate auth key (Reusable + Ephemeral)"
+            Write-Host "3. Add as GitHub Secret: TAILSCALE_AUTH_KEY"
+            Write-Host ""
+            exit 1
+          }
+          
+          $tailscale = "C:\Program Files\Tailscale\tailscale.exe"
+          
+          & $tailscale up --authkey=$AUTH_KEY --hostname=ultimate-rdp --accept-routes --accept-dns
+          
+          $ip = $null
+          $retries = 0
+          while (-not $ip -and $retries -lt 20) {
+            Start-Sleep -Seconds 3
+            $ip = & $tailscale ip -4 2>$null
+            $retries++
+          }
+          
+          if ($ip) {
+            echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
+            Write-Host "✅ Connected! IP: $ip"
+          } else {
+            Write-Host "❌ Failed to get IP"
+            & $tailscale status
+            exit 1
+          }
+
+      # ============================================
+      # STEP 9: SHOW CONNECTION INFO
+      # ============================================
+      - name: 📡 Connection Info
+        shell: pwsh
+        run: |
+          Write-Host ""
+          Write-Host "========================================="
+          Write-Host "🔥 ULTIMATE RDP - CONNECTION INFO"
+          Write-Host "========================================="
+          Write-Host ""
+          Write-Host "📡 TAILSCALE IP: $env:TAILSCALE_IP"
+          Write-Host "👤 USERNAME: Admin"
+          Write-Host "🔑 PASSWORD: $env:RDP_PASSWORD"
+          Write-Host ""
+          Write-Host "========================================="
+          Write-Host "📝 HOW TO CONNECT:"
+          Write-Host "========================================="
+          Write-Host "1. Install Tailscale on your PC"
+          Write-Host "2. Open Remote Desktop Connection"
+          Write-Host "3. Computer: $env:TAILSCALE_IP"
+          Write-Host "4. Username: Admin"
+          Write-Host "5. Password: $env:RDP_PASSWORD"
+          Write-Host ""
+          Write-Host "🎮 MINECRAFT SERVER:"
+          Write-Host "   📂 C:\Minecraft"
+          Write-Host "   🚀 Run: start.bat"
+          Write-Host ""
+          Write-Host "⚡ SYSTEM POWER:"
+          Write-Host "   🔹 CPU: AMD EPYC 7763 (2 cores)"
+          Write-Host "   🔹 RAM: 16 GB"
+          Write-Host "   🔹 Disk: 130+ GB free"
+          Write-Host "========================================="
+
+      # ============================================
+      # STEP 10: KEEP ALIVE
+      # ============================================
+      - name: 💤 Keep Alive
+        shell: pwsh
+        run: |
+          Write-Host "🔄 Keeping Ultimate RDP alive..."
+          
+          $endTime = (Get-Date).AddHours(${{ github.event.inputs.duration }})
+          $count = 0
+          
+          while ((Get-Date) -lt $endTime) {
+            $count++
+            $cpu = Get-WmiObject -Class Win32_Processor
+            $ram = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB, 2)
+            
+            Write-Host ""
+            Write-Host "[$count] 🔥 ULTIMATE RDP ACTIVE"
+            Write-Host "   📡 IP: $env:TAILSCALE_IP"
+            Write-Host "   🖥️ CPU: $($cpu.Name)"
+            Write-Host "   📊 RAM: $ram GB"
+            Write-Host "   ⏱️ Time: $(Get-Date -Format 'HH:mm:ss')"
+            Write-Host "   💤 Press Ctrl+C to stop"
+            Write-Host ""
+            Start-Sleep -Seconds 300
+          }
+          
+          Write-Host "⏰ Time's up! Runner will stop."
