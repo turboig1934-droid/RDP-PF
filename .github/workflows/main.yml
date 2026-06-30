@@ -1,4 +1,4 @@
-name: 🔥 ULTRA MAXIMUM RDP - Full Power
+name: 🔥 ULTRA MAXIMUM RDP - 150GB Edition
 
 on:
   workflow_dispatch:
@@ -38,14 +38,16 @@ jobs:
           $ram = Get-WmiObject Win32_ComputerSystem
           $ramGB = [math]::Round($ram.TotalPhysicalMemory/1GB, 2)
           Write-Host "📊 Total RAM: $ramGB GB"
-          Write-Host "   Available RAM: $([math]::Round($ram.FreePhysicalMemory/1MB, 2)) GB"
           
           $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
           $totalGB = [math]::Round($disk.Size / 1GB, 2)
           $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
           Write-Host "💾 Total Disk: $totalGB GB"
-          Write-Host "   Free Space: $freeGB GB"
+          Write-Host "💾 Free Space: $freeGB GB"
           
+          Write-Host "========================================="
+          Write-Host "⚠️ DISK IS ALREADY AT MAXIMUM SIZE (150GB)"
+          Write-Host "   Expanding not possible on GitHub Runners"
           Write-Host "========================================="
 
       # ============================================
@@ -58,7 +60,12 @@ jobs:
           Write-Host "💾 FREEING UP MAXIMUM DISK SPACE"
           Write-Host "========================================="
           
-          # Clean Windows temporary files
+          # Show current space
+          $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
+          $beforeFree = [math]::Round($disk.FreeSpace / 1GB, 2)
+          Write-Host "📊 Before Cleanup: $beforeFree GB free"
+          
+          # Clean Windows temp files
           Write-Host "🧹 Cleaning Windows temp files..."
           Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "C:\Users\*\AppData\Local\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
@@ -71,56 +78,26 @@ jobs:
           
           # Clean WinSxS backups
           Write-Host "🧹 Cleaning WinSxS backups..."
-          dism /online /Cleanup-Image /StartComponentCleanup /ResetBase
+          dism /online /Cleanup-Image /StartComponentCleanup /ResetBase | Out-Null
           
-          # Remove pre-installed apps
-          Write-Host "🧹 Removing pre-installed apps..."
-          Get-AppxPackage -AllUsers | Where-Object {$_.Name -match "Bing|Xbox|OneConnect|People|Skype|Solitaire|Spotify|StickyNotes|Tips|WindowsMaps|ZuneMusic|ZuneVideo"} | Remove-AppxPackage -ErrorAction SilentlyContinue
+          # Remove pre-installed bloatware
+          Write-Host "🧹 Removing bloatware apps..."
+          Get-AppxPackage -AllUsers | Where-Object {$_.Name -match "Bing|Xbox|OneConnect|People|Skype|Solitaire|Spotify|StickyNotes|Tips|WindowsMaps|ZuneMusic|ZuneVideo|Microsoft.Microsoft3DViewer|Microsoft.MicrosoftOfficeHub|Microsoft.MicrosoftSolitaireCollection|Microsoft.MinecraftUWP|Microsoft.GetHelp|Microsoft.Getstarted|Microsoft.Messaging|Microsoft.WindowsAlarms|Microsoft.WindowsCalculator|Microsoft.WindowsCamera|Microsoft.WindowsFeedbackHub|Microsoft.WindowsMaps|Microsoft.WindowsSoundRecorder|Microsoft.YourPhone"} | Remove-AppxPackage -ErrorAction SilentlyContinue
           
-          # Clean Docker/VS cache if exists
-          Remove-Item -Path "C:\ProgramData\Docker\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\ProgramData\Microsoft\VisualStudio\*" -Recurse -Force -ErrorAction SilentlyContinue
+          # Clean up Windows features
+          Write-Host "🧹 Disabling unnecessary Windows features..."
+          Disable-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64" -Remove -ErrorAction SilentlyContinue
+          Disable-WindowsOptionalFeature -Online -FeatureName "WindowsMediaPlayer" -Remove -ErrorAction SilentlyContinue
           
-          # Show freed space
+          # Show after cleanup
           $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
-          $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-          Write-Host "✅ Free Space After Cleanup: $freeGB GB"
+          $afterFree = [math]::Round($disk.FreeSpace / 1GB, 2)
+          $freed = $afterFree - $beforeFree
+          Write-Host "✅ After Cleanup: $afterFree GB free"
+          Write-Host "✅ Freed Space: $freed GB"
 
       # ============================================
-      # STEP 3: EXPAND DISK TO MAXIMUM
-      # ============================================
-      - name: 💾 Expand Disk to Maximum
-        shell: pwsh
-        run: |
-          Write-Host "========================================="
-          Write-Host "💾 EXPANDING DISK TO MAXIMUM AVAILABLE"
-          Write-Host "========================================="
-          
-          # Try to expand to maximum available
-          $disk = Get-Disk | Where-Object { $_.BusType -ne "USB" } | Select-Object -First 1
-          $partition = Get-Partition -DiskNumber $disk.Number | Where-Object { $_.DriveLetter -eq "C" }
-          
-          if ($partition) {
-            Write-Host "📊 Current Size: $([math]::Round($partition.Size/1GB, 2)) GB"
-            
-            # Get maximum available size
-            $maxSize = $disk.Size
-            $maxSizeGB = [math]::Round($maxSize/1GB, 2)
-            Write-Host "📊 Max Possible Size: $maxSizeGB GB"
-            
-            # Resize to maximum
-            Resize-Partition -DriveLetter C -Size $maxSize
-            
-            # Verify
-            $newDisk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
-            $newSize = [math]::Round($newDisk.Size / 1GB, 2)
-            $newFree = [math]::Round($newDisk.FreeSpace / 1GB, 2)
-            Write-Host "✅ New Total: $newSize GB"
-            Write-Host "✅ New Free Space: $newFree GB"
-          }
-
-      # ============================================
-      # STEP 4: ENABLE RDP
+      # STEP 3: ENABLE RDP
       # ============================================
       - name: ⚡ Enable Maximum Performance RDP
         shell: pwsh
@@ -140,7 +117,7 @@ jobs:
           Write-Host "✅ RDP Configured!"
 
       # ============================================
-      # STEP 5: CREATE USER
+      # STEP 4: CREATE USER
       # ============================================
       - name: 👤 Create Ultra Administrator
         shell: pwsh
@@ -166,7 +143,7 @@ jobs:
           Write-Host "✅ Ultra User created"
 
       # ============================================
-      # STEP 6: INSTALL CHOCOLATEY
+      # STEP 5: INSTALL CHOCOLATEY
       # ============================================
       - name: 📦 Install Chocolatey
         shell: pwsh
@@ -178,14 +155,14 @@ jobs:
           Write-Host "✅ Chocolatey installed"
 
       # ============================================
-      # STEP 7: INSTALL HEAVY TOOLS (Space Optimized)
+      # STEP 6: INSTALL TOOLS (Space Optimized)
       # ============================================
-      - name: 📦 Install Heavy Development Tools
+      - name: 📦 Install Optimized Tools
         if: github.event.inputs.install_heavy_tools == 'true'
         shell: pwsh
         run: |
           Write-Host "========================================="
-          Write-Host "📦 INSTALLING HEAVY TOOLS"
+          Write-Host "📦 INSTALLING OPTIMIZED TOOLS"
           Write-Host "========================================="
           
           # Check available space
@@ -193,60 +170,74 @@ jobs:
           $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
           Write-Host "💾 Available Space: $freeGB GB"
           
-          if ($freeGB -lt 30) {
+          if ($freeGB -lt 25) {
             Write-Host "⚠️ Low space! Installing minimal tools..."
             
-            # Minimal tools
-            choco install vscode git python312 nodejs -y
-            choco install chrome firefox -y
+            # MINIMAL TOOLS (Under 5GB)
+            choco install vscode git python312 nodejs-lts -y
+            choco install googlechrome firefox -y
             choco install 7zip notepadplusplus -y
             
-          } else {
-            Write-Host "✅ Sufficient space! Installing full tools..."
+            Write-Host "✅ Minimal tools installed!"
             
-            # Development (Space optimized)
-            Write-Host "🛠️ Installing VS Code..."
-            choco install vscode -y
+          } elseif ($freeGB -lt 50) {
+            Write-Host "📦 Medium space! Installing medium tools..."
             
-            Write-Host "🐍 Installing Python 3.12..."
-            choco install python312 -y
-            
-            Write-Host "📦 Installing Node.js..."
-            choco install nodejs -y
-            
-            Write-Host "☕ Installing Java..."
-            choco install openjdk21 -y
-            
-            # Databases
-            Write-Host "🗄️ Installing MySQL..."
-            choco install mysql -y
-            
-            # DevOps
-            Write-Host "🐳 Installing Docker Desktop..."
-            choco install docker-desktop -y
-            
-            # Tools
-            Write-Host "🔧 Installing Tools..."
-            choco install git github-desktop putty filezilla -y
+            # MEDIUM TOOLS (Under 15GB)
+            choco install vscode git python312 nodejs-lts -y
+            choco install openjdk21 dotnet-8.0-sdk -y
+            choco install mysql docker-desktop -y
             choco install googlechrome firefox -y
-            choco install 7zip notepadplusplus everything -y
+            choco install 7zip notepadplusplus everything filezilla putty -y
             
             # Python packages
             python -m pip install --upgrade pip
             python -m pip install numpy pandas matplotlib jupyterlab
+            
+            Write-Host "✅ Medium tools installed!"
+            
+          } else {
+            Write-Host "✅ Sufficient space! Installing full tools..."
+            
+            # FULL TOOLS (Under 30GB)
+            # Development
+            choco install vscode git python312 nodejs-lts -y
+            choco install openjdk21 dotnet-8.0-sdk maven gradle -y
+            
+            # Databases
+            choco install mysql postgresql mongodb redis -y
+            
+            # DevOps
+            choco install docker-desktop kubernetes-helm kubectl -y
+            
+            # Tools
+            choco install googlechrome firefox -y
+            choco install 7zip notepadplusplus everything filezilla putty wireshark -y
+            choco install github-desktop azure-cli awscli -y
+            
+            # Python packages
+            python -m pip install --upgrade pip
+            python -m pip install numpy pandas matplotlib scipy tensorflow torch jupyterlab
+            python -m pip install django flask fastapi
+            
+            # Node packages
+            npm install -g yarn typescript @angular/cli create-react-app next
+            
+            Write-Host "✅ Full tools installed!"
           }
           
-          Write-Host "✅ Tools installed!"
-          
-          # Show disk usage
+          # Show disk usage after installation
           $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
           $usedGB = [math]::Round(($disk.Size - $disk.FreeSpace) / 1GB, 2)
           $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-          Write-Host "💾 Used Space: $usedGB GB"
-          Write-Host "💾 Free Space: $freeGB GB"
+          Write-Host ""
+          Write-Host "📊 FINAL DISK USAGE:"
+          Write-Host "   Used: $usedGB GB"
+          Write-Host "   Free: $freeGB GB"
+          Write-Host "   Total: $([math]::Round($disk.Size/1GB, 2)) GB"
 
       # ============================================
-      # STEP 8: INSTALL TAILSCALE
+      # STEP 7: INSTALL TAILSCALE
       # ============================================
       - name: 📡 Install Tailscale
         shell: pwsh
@@ -263,7 +254,7 @@ jobs:
           Write-Host "✅ Tailscale installed"
 
       # ============================================
-      # STEP 9: CONNECT TAILSCALE
+      # STEP 8: CONNECT TAILSCALE
       # ============================================
       - name: 🔗 Connect Tailscale
         shell: pwsh
@@ -308,11 +299,15 @@ jobs:
           }
 
       # ============================================
-      # STEP 10: SHOW CONNECTION INFO
+      # STEP 9: SHOW CONNECTION INFO
       # ============================================
       - name: 📋 Show Connection Info
         shell: pwsh
         run: |
+          $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
+          $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+          $totalGB = [math]::Round($disk.Size / 1GB, 2)
+          
           Write-Host ""
           Write-Host "============================================================"
           Write-Host "🔥 ULTRA MAXIMUM RDP - CONNECTION INFORMATION"
@@ -322,8 +317,8 @@ jobs:
           Write-Host "👤 USERNAME: UltraUser"
           Write-Host "🔑 PASSWORD: $env:RDP_PASSWORD"
           Write-Host ""
-          Write-Host "💾 DISK SPACE: Maximum Available"
-          Write-Host "⚡ PERFORMANCE: MAXIMUM"
+          Write-Host "💾 DISK: $freeGB GB free / $totalGB GB total"
+          Write-Host "⚡ STATUS: MAXIMUM PERFORMANCE"
           Write-Host ""
           Write-Host "============================================================"
           Write-Host "📝 HOW TO CONNECT:"
@@ -336,7 +331,7 @@ jobs:
           Write-Host "============================================================"
 
       # ============================================
-      # STEP 11: KEEP ALIVE
+      # STEP 10: KEEP ALIVE
       # ============================================
       - name: 🔄 Keep Alive
         shell: pwsh
