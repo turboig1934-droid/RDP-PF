@@ -2,11 +2,6 @@ name: RDP
 
 on:
   workflow_dispatch:
-    inputs:
-      duration:
-        description: 'Hours'
-        type: number
-        default: 6
 
 jobs:
   rdp:
@@ -14,206 +9,54 @@ jobs:
     timeout-minutes: 43200
 
     steps:
-      # ============================================
-      # SYSTEM INFO
-      # ============================================
       - name: System Info
-        shell: pwsh
         run: |
-          Write-Host "========================================="
-          Write-Host "SYSTEM SPECIFICATIONS"
-          Write-Host "========================================="
-          $cpu = Get-WmiObject -Class Win32_Processor
-          Write-Host "CPU: $($cpu.Name)"
-          Write-Host "Cores: $($cpu.NumberOfCores)"
-          $ram = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB, 2)
-          Write-Host "RAM: $ram GB"
-          $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
-          Write-Host "Free Disk: $([math]::Round($disk.FreeSpace/1GB, 2)) GB"
-          Write-Host "========================================="
+          systeminfo | findstr /C:"OS Name"
+          systeminfo | findstr /C:"Total Physical Memory"
+          wmic cpu get name
+          wmic logicaldisk where "DeviceID='C:'" get Size,FreeSpace
 
-      # ============================================
-      # ENABLE RDP
-      # ============================================
       - name: Enable RDP
-        shell: pwsh
         run: |
-          Write-Host "Enabling RDP..."
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-          netsh advfirewall firewall delete rule name="RDP" 2>$null
-          netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f
+          netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+          wmic path win32_computersystem where name="%COMPUTERNAME%" set AutomaticManagedPagefile=True
           powercfg -change -standby-timeout-ac 0
-          Restart-Service -Name TermService -Force
-          Write-Host "RDP Enabled"
 
-      # ============================================
-      # CREATE USER - WITH PASSWORD POLICY BYPASS
-      # ============================================
       - name: Create User
-        shell: pwsh
         run: |
-          Write-Host "Creating User..."
-          
-          # Disable password complexity policy
-          Write-Host "Disabling password policy..."
-          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "LimitBlankPasswordUse" -Value 0 -Force
-          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "NoLMHash" -Value 0 -Force
-          
-          # Use net user command (bypasses PowerShell password restrictions)
-          Write-Host "Creating user with net user..."
-          $password = "Admin@2024#" + (Get-Random -Minimum 100 -Maximum 999)
-          
-          # Remove existing user if exists
-          net user Admin /delete 2>$null
-          
-          # Create user with net user
-          net user Admin $password /add /fullname:"Administrator" /active:yes
-          net localgroup Administrators Admin /add
-          net localgroup "Remote Desktop Users" Admin /add
-          
-          # Save to env
-          echo "USER=Admin" >> $env:GITHUB_ENV
-          echo "PASS=$password" >> $env:GITHUB_ENV
-          
-          Write-Host "User Created Successfully!"
-          
-          # Verify user
-          net user Admin
+          net user admin P@ssw0rd123! /add
+          net localgroup administrators admin /add
+          net localgroup "Remote Desktop Users" admin /add
+          echo "Username: admin"
+          echo "Password: P@ssw0rd123!"
 
-      # ============================================
-      # INSTALL CHOCOLATEY
-      # ============================================
-      - name: Install Chocolatey
-        shell: pwsh
-        run: |
-          Write-Host "Installing Chocolatey..."
-          Set-ExecutionPolicy Bypass -Scope Process -Force
-          [System.Net.ServicePointManager]::SecurityProtocol = 3072
-          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-          Write-Host "Chocolatey Installed"
-
-      # ============================================
-      # INSTALL BASIC TOOLS
-      # ============================================
-      - name: Install Tools
-        shell: pwsh
-        run: |
-          Write-Host "Installing Tools..."
-          choco install vscode git python googlechrome 7zip notepadplusplus -y --limit-output
-          Write-Host "Tools Installed"
-
-      # ============================================
-      # INSTALL TAILSCALE
-      # ============================================
       - name: Install Tailscale
-        shell: pwsh
         run: |
-          Write-Host "Installing Tailscale..."
-          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-          $installer = "$env:TEMP\tailscale.msi"
-          Invoke-WebRequest -Uri $url -OutFile $installer
-          Start-Process msiexec.exe -ArgumentList "/i `"$installer`" /quiet /norestart" -Wait
-          Remove-Item $installer -Force
-          Write-Host "Tailscale Installed"
+          curl -L -o tailscale.msi https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi
+          msiexec /i tailscale.msi /quiet /norestart
+          del tailscale.msi
 
-      # ============================================
-      # CONNECT TAILSCALE
-      # ============================================
       - name: Connect Tailscale
-        shell: pwsh
         run: |
-          Write-Host "Connecting to Tailscale..."
-          
-          $AUTH_KEY = "${{ secrets.TAILSCALE_AUTH_KEY }}"
-          
-          if ([string]::IsNullOrEmpty($AUTH_KEY)) {
-            Write-Host "ERROR: TAILSCALE_AUTH_KEY not set!"
-            Write-Host ""
-            Write-Host "How to fix:"
-            Write-Host "1. Go to https://login.tailscale.com/admin/settings/keys"
-            Write-Host "2. Generate auth key (Reusable + Ephemeral)"
-            Write-Host "3. Settings → Secrets → New secret"
-            Write-Host "   Name: TAILSCALE_AUTH_KEY"
-            Write-Host "   Value: tskey-auth-xxxxx"
-            exit 1
-          }
-          
-          $tailscale = "C:\Program Files\Tailscale\tailscale.exe"
-          
-          # Connect
-          & $tailscale up --authkey=$AUTH_KEY --hostname=rdp-server --accept-routes --accept-dns
-          
-          # Wait and get IP
-          Start-Sleep -Seconds 10
-          $ip = & $tailscale ip -4 2>$null
-          
-          if ($ip) {
-            echo "IP=$ip" >> $env:GITHUB_ENV
-            Write-Host "Connected! IP: $ip"
-          } else {
-            Write-Host "Failed to get IP"
-            & $tailscale status
-            exit 1
-          }
+          "%ProgramFiles%\Tailscale\tailscale.exe" up --authkey=%TAILSCALE_AUTH_KEY% --hostname=rdp
+          for /f "tokens=*" %%i in ('"%ProgramFiles%\Tailscale\tailscale.exe" ip -4') do set IP=%%i
+          echo IP=%IP%
 
-      # ============================================
-      # SHOW CONNECTION INFO
-      # ============================================
       - name: Show Info
-        shell: pwsh
         run: |
-          Write-Host ""
-          Write-Host "========================================="
-          Write-Host "✅ RDP CONNECTION INFO"
-          Write-Host "========================================="
-          Write-Host ""
-          Write-Host "📡 IP Address: $env:IP"
-          Write-Host "👤 Username: Admin"
-          Write-Host "🔑 Password: $env:PASS"
-          Write-Host ""
-          Write-Host "========================================="
-          Write-Host "📝 HOW TO CONNECT:"
-          Write-Host "========================================="
-          Write-Host "1. Install Tailscale on your PC"
-          Write-Host "   https://tailscale.com/download"
-          Write-Host ""
-          Write-Host "2. Open Remote Desktop Connection"
-          Write-Host "   (Windows: mstsc, Mac: Microsoft Remote Desktop)"
-          Write-Host ""
-          Write-Host "3. Enter details:"
-          Write-Host "   Computer: $env:IP"
-          Write-Host "   Username: Admin"
-          Write-Host "   Password: $env:PASS"
-          Write-Host "========================================="
-          Write-Host ""
+          echo =========================================
+          echo RDP CONNECTION INFO
+          echo =========================================
+          echo IP Address: %IP%
+          echo Username: admin
+          echo Password: P@ssw0rd123!
+          echo =========================================
 
-      # ============================================
-      # KEEP ALIVE
-      # ============================================
       - name: Keep Alive
-        shell: pwsh
         run: |
-          Write-Host "🔄 Keeping RDP alive for ${{ github.event.inputs.duration }} hours..."
-          Write-Host ""
-          
-          $endTime = (Get-Date).AddHours(${{ github.event.inputs.duration }})
-          $count = 0
-          
-          while ((Get-Date) -lt $endTime) {
-            $count++
-            $ram = Get-WmiObject Win32_ComputerSystem
-            $ramUsed = [math]::Round(($ram.TotalPhysicalMemory - $ram.FreePhysicalMemory) / 1GB, 2)
-            $ramTotal = [math]::Round($ram.TotalPhysicalMemory / 1GB, 2)
-            
-            $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
-            $diskFree = [math]::Round($disk.FreeSpace / 1GB, 2)
-            
-            Write-Host "[$count] ⏱️ $(Get-Date -Format 'HH:mm:ss') | RDP Active | IP: $env:IP"
-            Write-Host "   📊 RAM: $ramUsed GB / $ramTotal GB | 💾 Free Disk: $diskFree GB"
-            Write-Host ""
-            
-            Start-Sleep -Seconds 60
-          }
-          
-          Write-Host "✅ RDP session completed!"
+          for /L %%i in (1,1,1440) do (
+            echo RDP Active - %date% %time%
+            timeout /t 60 /nobreak >nul
+          )
