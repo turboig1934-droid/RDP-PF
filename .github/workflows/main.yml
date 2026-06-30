@@ -48,36 +48,38 @@ jobs:
           Write-Host "RDP Enabled"
 
       # ============================================
-      # CREATE USER - FIXED PASSWORD
+      # CREATE USER - WITH PASSWORD POLICY BYPASS
       # ============================================
       - name: Create User
         shell: pwsh
         run: |
           Write-Host "Creating User..."
           
-          # Strong password with special chars
+          # Disable password complexity policy
+          Write-Host "Disabling password policy..."
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "LimitBlankPasswordUse" -Value 0 -Force
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "NoLMHash" -Value 0 -Force
+          
+          # Use net user command (bypasses PowerShell password restrictions)
+          Write-Host "Creating user with net user..."
           $password = "Admin@2024#" + (Get-Random -Minimum 100 -Maximum 999)
           
-          # Check password complexity
-          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-          
           # Remove existing user if exists
-          if (Get-LocalUser -Name "Admin" -ErrorAction SilentlyContinue) {
-            Remove-LocalUser -Name "Admin" -Force
-          }
+          net user Admin /delete 2>$null
           
-          # Create user
-          New-LocalUser -Name "Admin" -Password $securePass -PasswordNeverExpires -AccountNeverExpires -FullName "Administrator"
-          
-          # Add to groups
-          Add-LocalGroupMember -Group "Administrators" -Member "Admin"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "Admin"
+          # Create user with net user
+          net user Admin $password /add /fullname:"Administrator" /active:yes
+          net localgroup Administrators Admin /add
+          net localgroup "Remote Desktop Users" Admin /add
           
           # Save to env
           echo "USER=Admin" >> $env:GITHUB_ENV
           echo "PASS=$password" >> $env:GITHUB_ENV
           
           Write-Host "User Created Successfully!"
+          
+          # Verify user
+          net user Admin
 
       # ============================================
       # INSTALL CHOCOLATEY
@@ -143,24 +145,16 @@ jobs:
           & $tailscale up --authkey=$AUTH_KEY --hostname=rdp-server --accept-routes --accept-dns
           
           # Wait and get IP
-          Start-Sleep -Seconds 5
+          Start-Sleep -Seconds 10
           $ip = & $tailscale ip -4 2>$null
           
           if ($ip) {
             echo "IP=$ip" >> $env:GITHUB_ENV
             Write-Host "Connected! IP: $ip"
           } else {
-            Write-Host "Waiting for IP..."
-            Start-Sleep -Seconds 10
-            $ip = & $tailscale ip -4 2>$null
-            if ($ip) {
-              echo "IP=$ip" >> $env:GITHUB_ENV
-              Write-Host "Connected! IP: $ip"
-            } else {
-              Write-Host "Failed to get IP"
-              & $tailscale status
-              exit 1
-            }
+            Write-Host "Failed to get IP"
+            & $tailscale status
+            exit 1
           }
 
       # ============================================
