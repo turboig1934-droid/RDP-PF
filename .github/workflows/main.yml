@@ -1,77 +1,142 @@
-name: 🔥 ULTRA HEAVY RDP - Full Power
+name: 🔥 ULTRA MAXIMUM RDP - 500GB+ Full Power
 
 on:
   workflow_dispatch:
     inputs:
       duration:
-        description: 'Hours to keep running'
+        description: 'Hours to keep running (Max 24)'
         type: number
-        default: 6
+        default: 12
+        minimum: 1
+        maximum: 24
       install_heavy_tools:
         description: 'Install heavy tools (VS, Docker, Python, Node, etc.)'
         type: boolean
         default: true
+      disk_size_gb:
+        description: 'Disk size in GB (100-500)'
+        type: number
+        default: 500
+        minimum: 100
+        maximum: 500
 
 jobs:
-  ultra-heavy-rdp:
+  ultra-max-rdp:
     runs-on: windows-latest
     timeout-minutes: 43200
 
     steps:
       # ============================================
-      # STEP 1: SYSTEM INFO
+      # STEP 1: MAXIMUM SYSTEM INFO
       # ============================================
-      - name: System Information
+      - name: 🖥️ Maximum System Information
         shell: pwsh
         run: |
           Write-Host "========================================="
-          Write-Host "⚡ ULTRA HEAVY SYSTEM SPECIFICATIONS"
+          Write-Host "🔥 ULTRA MAXIMUM SYSTEM SPECIFICATIONS"
           Write-Host "========================================="
           
           $cpu = Get-WmiObject -Class Win32_Processor
           Write-Host "🖥️ CPU: $($cpu.Name)"
           Write-Host "   Cores: $($cpu.NumberOfCores)"
+          Write-Host "   Threads: $($cpu.NumberOfLogicalProcessors)"
           
-          $ramGB = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB, 2)
-          Write-Host "📊 RAM: $ramGB GB"
+          $ram = Get-WmiObject Win32_ComputerSystem
+          $ramGB = [math]::Round($ram.TotalPhysicalMemory/1GB, 2)
+          Write-Host "📊 Total RAM: $ramGB GB"
+          Write-Host "   Available RAM: $([math]::Round($ram.FreePhysicalMemory/1MB, 2)) GB"
           
           $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
+          $totalGB = [math]::Round($disk.Size / 1GB, 2)
           $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-          Write-Host "💾 Free Disk: $freeGB GB"
+          Write-Host "💾 Total Disk: $totalGB GB"
+          Write-Host "   Free Space: $freeGB GB"
+          
+          $gpu = Get-WmiObject -Class Win32_VideoController | Where-Object { $_.Name -notlike "*Remote*" -and $_.Name -notlike "*Basic*" }
+          if ($gpu) {
+            Write-Host "🎮 GPU: $($gpu.Name)"
+            Write-Host "   VRAM: $([math]::Round($gpu.AdapterRAM/1GB, 2)) GB"
+          }
           
           Write-Host "========================================="
 
       # ============================================
-      # STEP 2: ENABLE RDP
+      # STEP 2: MAXIMUM DISK EXPANSION (500GB)
       # ============================================
-      - name: Enable RDP
+      - name: 💾 Maximum Disk Expansion - 500GB
         shell: pwsh
         run: |
-          Write-Host "🔧 Configuring Ultra Heavy RDP..."
+          Write-Host "========================================="
+          Write-Host "💾 EXPANDING DISK TO MAXIMUM CAPACITY"
+          Write-Host "========================================="
           
+          $targetSize = ${{ github.event.inputs.disk_size_gb }}
+          Write-Host "🎯 Target Size: $targetSize GB"
+          
+          # Get disk info
+          $disk = Get-Disk | Where-Object { $_.BusType -ne "USB" } | Select-Object -First 1
+          $partition = Get-Partition -DiskNumber $disk.Number | Where-Object { $_.DriveLetter -eq "C" }
+          
+          if ($partition) {
+            Write-Host "📊 Current Partition Size: $([math]::Round($partition.Size/1GB, 2)) GB"
+            
+            # Resize partition to maximum
+            Resize-Partition -DriveLetter C -Size ($targetSize * 1GB)
+            
+            Write-Host "✅ Partition resized to $targetSize GB"
+            
+            # Verify new size
+            $newDisk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
+            $newSize = [math]::Round($newDisk.Size / 1GB, 2)
+            $newFree = [math]::Round($newDisk.FreeSpace / 1GB, 2)
+            Write-Host "✅ New Total: $newSize GB"
+            Write-Host "✅ New Free Space: $newFree GB"
+          }
+
+      # ============================================
+      # STEP 3: ENABLE RDP WITH MAX PERFORMANCE
+      # ============================================
+      - name: ⚡ Enable Maximum Performance RDP
+        shell: pwsh
+        run: |
+          Write-Host "⚡ Configuring Maximum Performance RDP..."
+          
+          # Enable RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
           
-          netsh advfirewall firewall delete rule name="RDP-Ultra" 2>$null
-          netsh advfirewall firewall add rule name="RDP-Ultra" dir=in action=allow protocol=TCP localport=3389
+          # Maximum performance settings
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionCount" -Value 999 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxIdleTime" -Value 0 -Force
           
+          # Firewall
+          netsh advfirewall firewall delete rule name="RDP-Max" 2>$null
+          netsh advfirewall firewall add rule name="RDP-Max" dir=in action=allow protocol=TCP localport=3389
+          
+          # Power settings - Maximum performance
           powercfg -change -standby-timeout-ac 0
           powercfg -change -hibernate-timeout-ac 0
+          powercfg -change -monitor-timeout-ac 0
+          powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c  # High Performance
+          
+          # Disable unnecessary services
+          Stop-Service -Name SysMain -Force
+          Set-Service -Name SysMain -StartupType Disabled
           
           Restart-Service -Name TermService -Force
-          Write-Host "✅ Ultra RDP Configured!"
+          Write-Host "✅ Maximum Performance RDP Configured!"
 
       # ============================================
-      # STEP 3: CREATE USER - FIXED (No System.Web)
+      # STEP 4: CREATE ULTRA USER
       # ============================================
-      - name: Create Ultra User
+      - name: 👤 Create Ultra Administrator
         shell: pwsh
         run: |
-          Write-Host "👤 Creating Ultra User..."
+          Write-Host "👤 Creating Ultra Administrator User..."
           
-          # ✅ FIX: Simple password generator (no System.Web required)
-          $charSet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+'
-          $password = -join ((1..20) | ForEach { Get-Random -Maximum $charSet.Length | ForEach-Object { $charSet[$_] } })
+          # Maximum security password
+          $charSet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+{}[]|;:<>,.?/'
+          $password = -join ((1..32) | ForEach { Get-Random -Maximum $charSet.Length | ForEach-Object { $charSet[$_] } })
           
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
           
@@ -79,7 +144,7 @@ jobs:
             Remove-LocalUser -Name "UltraUser" -Force
           }
           
-          New-LocalUser -Name "UltraUser" -Password $securePass -AccountNeverExpires -FullName "Ultra Heavy User"
+          New-LocalUser -Name "UltraUser" -Password $securePass -AccountNeverExpires -FullName "Ultra Max User"
           Add-LocalGroupMember -Group "Administrators" -Member "UltraUser"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "UltraUser"
           
@@ -89,9 +154,9 @@ jobs:
           Write-Host "✅ Ultra User created"
 
       # ============================================
-      # STEP 4: INSTALL CHOCOLATEY
+      # STEP 5: INSTALL CHOCOLATEY
       # ============================================
-      - name: Install Chocolatey
+      - name: 📦 Install Chocolatey
         shell: pwsh
         run: |
           Write-Host "📦 Installing Chocolatey..."
@@ -101,35 +166,114 @@ jobs:
           Write-Host "✅ Chocolatey installed"
 
       # ============================================
-      # STEP 5: INSTALL HEAVY TOOLS
+      # STEP 6: INSTALL ULTRA HEAVY TOOLS (500GB SPACE)
       # ============================================
-      - name: Install Heavy Tools
+      - name: 📦 Install Ultra Heavy Development Tools
         if: github.event.inputs.install_heavy_tools == 'true'
         shell: pwsh
         run: |
-          Write-Host "📦 Installing Heavy Tools..."
+          Write-Host "========================================="
+          Write-Host "📦 INSTALLING ULTRA HEAVY TOOLS"
+          Write-Host "========================================="
           
-          # Development
-          choco install vscode git python nodejs openjdk21 -y
+          # Development Environments
+          Write-Host "🛠️ Installing Visual Studio 2022 Enterprise..."
+          choco install visualstudio2022enterprise visualstudio2022-workload-netweb visualstudio2022-workload-azure visualstudio2022-workload-data -y
           
-          # Database
-          choco install mysql postgresql mongodb -y
+          Write-Host "🛠️ Installing VS Code + Extensions..."
+          choco install vscode -y
+          code --install-extension ms-python.python
+          code --install-extension ms-vscode.cpptools
+          code --install-extension ms-dotnettools.csdevkit
+          code --install-extension GitHub.copilot
           
-          # Networking
-          choco install wireshark nmap putty filezilla -y
+          # Full Development Stack
+          Write-Host "🐍 Installing Python 3.12 + Libraries..."
+          choco install python312 -y
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas tensorflow torch torchvision jupyterlab
           
-          # Media
-          choco install ffmpeg vlc -y
+          Write-Host "☕ Installing Java + Build Tools..."
+          choco install openjdk21 maven gradle -y
           
-          # System
-          choco install cpu-z gpu-z everything -y
+          Write-Host "📦 Installing Node.js + Global Packages..."
+          choco install nodejs -y
+          npm install -g yarn pnpm typescript @angular/cli create-react-app next
           
-          Write-Host "✅ Heavy Tools installed!"
+          Write-Host "🔧 Installing .NET SDK 8.0..."
+          choco install dotnet-8.0-sdk -y
+          
+          # Databases
+          Write-Host "🗄️ Installing Databases..."
+          choco install mysql postgresql mongodb redis -y
+          
+          # DevOps & Containers
+          Write-Host "🐳 Installing Docker Desktop + Kubernetes..."
+          choco install docker-desktop kubernetes-helm kubectl -y
+          
+          # DevOps Tools
+          Write-Host "⚙️ Installing DevOps Tools..."
+          choco install git github-desktop azure-cli awscli terraform ansible -y
+          
+          # Networking & Security
+          Write-Host "🌐 Installing Networking Tools..."
+          choco install wireshark nmap putty filezilla openssl sysinternals -y
+          
+          # Media & Graphics
+          Write-Host "🎨 Installing Media Tools..."
+          choco install ffmpeg blender gimp inkscape vlc -y
+          
+          # System Utilities
+          Write-Host "🛠️ Installing System Utilities..."
+          choco install cpu-z gpu-z hwmonitor everything crystaldiskmark -y
+          
+          # Office & Browsers
+          Write-Host "📝 Installing Office & Browsers..."
+          choco install googlechrome firefox libreoffice-fresh -y
+          
+          # Additional Tools
+          Write-Host "🔧 Installing Additional Tools..."
+          choco install 7zip winrar notepadplusplus beyondcompare -y
+          
+          Write-Host "✅ All Ultra Heavy Tools Installed!"
+          
+          # Show disk usage after installation
+          $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
+          $usedGB = [math]::Round(($disk.Size - $disk.FreeSpace) / 1GB, 2)
+          $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+          Write-Host "💾 Used Space: $usedGB GB"
+          Write-Host "💾 Free Space: $freeGB GB"
 
       # ============================================
-      # STEP 6: INSTALL TAILSCALE
+      # STEP 7: CONFIGURE MAX PERFORMANCE
       # ============================================
-      - name: Install Tailscale
+      - name: ⚡ Configure Maximum Performance
+        shell: pwsh
+        run: |
+          Write-Host "⚡ Configuring Maximum Performance..."
+          
+          # Virtual Memory - 64GB Page File
+          $computerSystem = Get-WmiObject -Class Win32_ComputerSystem
+          $computerSystem.AutomaticManagedPagefile = $false
+          $computerSystem.Put()
+          
+          $pageFile = Get-WmiObject -Class Win32_PageFileSetting
+          $pageFile.InitialSize = 32768
+          $pageFile.MaximumSize = 65536
+          $pageFile.Put()
+          
+          # Priority Control
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 38 -Force
+          
+          # Large System Cache
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "LargeSystemCache" -Value 1 -Force
+          
+          Write-Host "✅ Maximum Performance Configured!"
+
+      # ============================================
+      # STEP 8: INSTALL TAILSCALE
+      # ============================================
+      - name: 📡 Install Tailscale
         shell: pwsh
         run: |
           Write-Host "📥 Installing Tailscale..."
@@ -144,9 +288,9 @@ jobs:
           Write-Host "✅ Tailscale installed"
 
       # ============================================
-      # STEP 7: CONNECT TAILSCALE
+      # STEP 9: CONNECT TAILSCALE
       # ============================================
-      - name: Connect Tailscale
+      - name: 🔗 Connect Tailscale
         shell: pwsh
         run: |
           Write-Host "🔗 Connecting to Tailscale..."
@@ -169,11 +313,11 @@ jobs:
           
           $tailscale = "C:\Program Files\Tailscale\tailscale.exe"
           
-          & $tailscale up --authkey=$AUTH_KEY --hostname=ultra-heavy-rdp --accept-routes --accept-dns
+          & $tailscale up --authkey=$AUTH_KEY --hostname=ultra-max-rdp --accept-routes --accept-dns
           
           $ip = $null
           $retries = 0
-          while (-not $ip -and $retries -lt 20) {
+          while (-not $ip -and $retries -lt 30) {
             Start-Sleep -Seconds 3
             $ip = & $tailscale ip -4 2>$null
             $retries++
@@ -189,46 +333,82 @@ jobs:
           }
 
       # ============================================
-      # STEP 8: SHOW CONNECTION INFO
+      # STEP 10: SHOW CONNECTION INFO
       # ============================================
-      - name: Show Connection Info
+      - name: 📋 Show Connection Info
         shell: pwsh
         run: |
           Write-Host ""
-          Write-Host "========================================="
-          Write-Host "🔥 ULTRA HEAVY RDP - CONNECTION INFO"
-          Write-Host "========================================="
+          Write-Host "============================================================"
+          Write-Host "🔥 ULTRA MAXIMUM RDP - CONNECTION INFORMATION"
+          Write-Host "============================================================"
           Write-Host ""
           Write-Host "📡 TAILSCALE IP: $env:TAILSCALE_IP"
           Write-Host "👤 USERNAME: UltraUser"
           Write-Host "🔑 PASSWORD: $env:RDP_PASSWORD"
           Write-Host ""
-          Write-Host "========================================="
+          Write-Host "💾 DISK SPACE: 500 GB"
+          Write-Host "⚡ PERFORMANCE: MAXIMUM"
+          Write-Host ""
+          Write-Host "============================================================"
           Write-Host "📝 HOW TO CONNECT:"
-          Write-Host "========================================="
+          Write-Host "============================================================"
           Write-Host "1. Install Tailscale on your PC"
           Write-Host "2. Open Remote Desktop Connection"
           Write-Host "3. Computer: $env:TAILSCALE_IP"
           Write-Host "4. Username: UltraUser"
           Write-Host "5. Password: $env:RDP_PASSWORD"
-          Write-Host "========================================="
+          Write-Host "============================================================"
+          Write-Host ""
+          Write-Host "🛠️ INSTALLED TOOLS:"
+          Write-Host "   • VS 2022 Enterprise"
+          Write-Host "   • VS Code + AI Extensions"
+          Write-Host "   • Python 3.12 + ML Libraries"
+          Write-Host "   • Node.js + Angular/React/Next"
+          Write-Host "   • Java + Maven + Gradle"
+          Write-Host "   • .NET 8.0 SDK"
+          Write-Host "   • Docker Desktop + Kubernetes"
+          Write-Host "   • MySQL, PostgreSQL, MongoDB, Redis"
+          Write-Host "   • Azure CLI, AWS CLI, Terraform"
+          Write-Host "   • Wireshark, Nmap, OpenSSL"
+          Write-Host "   • Blender, GIMP, Inkscape"
+          Write-Host "   • LibreOffice, Chrome, Firefox"
+          Write-Host "============================================================"
 
       # ============================================
-      # STEP 9: KEEP ALIVE
+      # STEP 11: KEEP ALIVE WITH STATUS
       # ============================================
-      - name: Keep Alive
+      - name: 🔄 Keep Alive with Status Updates
         shell: pwsh
         run: |
-          Write-Host "🔄 Keeping ULTRA HEAVY runner alive..."
+          Write-Host "🔄 Keeping ULTRA MAXIMUM RDP alive..."
           
           $endTime = (Get-Date).AddHours(${{ github.event.inputs.duration }})
           $count = 0
           
+          # Get system stats
           while ((Get-Date) -lt $endTime) {
             $count++
-            Write-Host "[$count] 🔥 ULTRA HEAVY RDP ACTIVE"
+            $ram = Get-WmiObject Win32_ComputerSystem
+            $ramUsed = [math]::Round(($ram.TotalPhysicalMemory - $ram.FreePhysicalMemory) / 1GB, 2)
+            $ramTotal = [math]::Round($ram.TotalPhysicalMemory / 1GB, 2)
+            
+            $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
+            $diskFree = [math]::Round($disk.FreeSpace / 1GB, 2)
+            $diskTotal = [math]::Round($disk.Size / 1GB, 2)
+            
+            Write-Host ""
+            Write-Host "============================================================"
+            Write-Host "[$count] 🔥 ULTRA MAXIMUM RDP ACTIVE"
+            Write-Host "============================================================"
             Write-Host "   📡 IP: $env:TAILSCALE_IP"
             Write-Host "   ⏱️ Time: $(Get-Date -Format 'HH:mm:ss')"
+            Write-Host "   📊 RAM: $ramUsed GB / $ramTotal GB used"
+            Write-Host "   💾 DISK: $diskFree GB / $diskTotal GB free"
+            Write-Host "   ⚡ Status: MAXIMUM PERFORMANCE"
+            Write-Host "============================================================"
             Write-Host "   💤 Press Ctrl+C to stop"
+            Write-Host ""
+            
             Start-Sleep -Seconds 60
           }
