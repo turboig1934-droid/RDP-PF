@@ -1,4 +1,4 @@
-name: 🔥 ULTRA MAXIMUM RDP - 500GB+ Full Power
+name: 🔥 ULTRA MAXIMUM RDP - Full Power
 
 on:
   workflow_dispatch:
@@ -13,12 +13,6 @@ on:
         description: 'Install heavy tools (VS, Docker, Python, Node, etc.)'
         type: boolean
         default: true
-      disk_size_gb:
-        description: 'Disk size in GB (100-500)'
-        type: number
-        default: 500
-        minimum: 100
-        maximum: 500
 
 jobs:
   ultra-max-rdp:
@@ -27,9 +21,9 @@ jobs:
 
     steps:
       # ============================================
-      # STEP 1: MAXIMUM SYSTEM INFO
+      # STEP 1: SYSTEM INFO
       # ============================================
-      - name: 🖥️ Maximum System Information
+      - name: 🖥️ System Information
         shell: pwsh
         run: |
           Write-Host "========================================="
@@ -52,40 +46,72 @@ jobs:
           Write-Host "💾 Total Disk: $totalGB GB"
           Write-Host "   Free Space: $freeGB GB"
           
-          $gpu = Get-WmiObject -Class Win32_VideoController | Where-Object { $_.Name -notlike "*Remote*" -and $_.Name -notlike "*Basic*" }
-          if ($gpu) {
-            Write-Host "🎮 GPU: $($gpu.Name)"
-            Write-Host "   VRAM: $([math]::Round($gpu.AdapterRAM/1GB, 2)) GB"
-          }
-          
           Write-Host "========================================="
 
       # ============================================
-      # STEP 2: MAXIMUM DISK EXPANSION (500GB)
+      # STEP 2: FREE UP MAXIMUM SPACE
       # ============================================
-      - name: 💾 Maximum Disk Expansion - 500GB
+      - name: 💾 Free Up Maximum Space
         shell: pwsh
         run: |
           Write-Host "========================================="
-          Write-Host "💾 EXPANDING DISK TO MAXIMUM CAPACITY"
+          Write-Host "💾 FREEING UP MAXIMUM DISK SPACE"
           Write-Host "========================================="
           
-          $targetSize = ${{ github.event.inputs.disk_size_gb }}
-          Write-Host "🎯 Target Size: $targetSize GB"
+          # Clean Windows temporary files
+          Write-Host "🧹 Cleaning Windows temp files..."
+          Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\*\AppData\Local\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
           
-          # Get disk info
+          # Clean Windows Update cache
+          Write-Host "🧹 Cleaning Windows Update cache..."
+          Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Start-Service -Name wuauserv -ErrorAction SilentlyContinue
+          
+          # Clean WinSxS backups
+          Write-Host "🧹 Cleaning WinSxS backups..."
+          dism /online /Cleanup-Image /StartComponentCleanup /ResetBase
+          
+          # Remove pre-installed apps
+          Write-Host "🧹 Removing pre-installed apps..."
+          Get-AppxPackage -AllUsers | Where-Object {$_.Name -match "Bing|Xbox|OneConnect|People|Skype|Solitaire|Spotify|StickyNotes|Tips|WindowsMaps|ZuneMusic|ZuneVideo"} | Remove-AppxPackage -ErrorAction SilentlyContinue
+          
+          # Clean Docker/VS cache if exists
+          Remove-Item -Path "C:\ProgramData\Docker\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\ProgramData\Microsoft\VisualStudio\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # Show freed space
+          $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
+          $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+          Write-Host "✅ Free Space After Cleanup: $freeGB GB"
+
+      # ============================================
+      # STEP 3: EXPAND DISK TO MAXIMUM
+      # ============================================
+      - name: 💾 Expand Disk to Maximum
+        shell: pwsh
+        run: |
+          Write-Host "========================================="
+          Write-Host "💾 EXPANDING DISK TO MAXIMUM AVAILABLE"
+          Write-Host "========================================="
+          
+          # Try to expand to maximum available
           $disk = Get-Disk | Where-Object { $_.BusType -ne "USB" } | Select-Object -First 1
           $partition = Get-Partition -DiskNumber $disk.Number | Where-Object { $_.DriveLetter -eq "C" }
           
           if ($partition) {
-            Write-Host "📊 Current Partition Size: $([math]::Round($partition.Size/1GB, 2)) GB"
+            Write-Host "📊 Current Size: $([math]::Round($partition.Size/1GB, 2)) GB"
             
-            # Resize partition to maximum
-            Resize-Partition -DriveLetter C -Size ($targetSize * 1GB)
+            # Get maximum available size
+            $maxSize = $disk.Size
+            $maxSizeGB = [math]::Round($maxSize/1GB, 2)
+            Write-Host "📊 Max Possible Size: $maxSizeGB GB"
             
-            Write-Host "✅ Partition resized to $targetSize GB"
+            # Resize to maximum
+            Resize-Partition -DriveLetter C -Size $maxSize
             
-            # Verify new size
+            # Verify
             $newDisk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
             $newSize = [math]::Round($newDisk.Size / 1GB, 2)
             $newFree = [math]::Round($newDisk.FreeSpace / 1GB, 2)
@@ -94,47 +120,33 @@ jobs:
           }
 
       # ============================================
-      # STEP 3: ENABLE RDP WITH MAX PERFORMANCE
+      # STEP 4: ENABLE RDP
       # ============================================
       - name: ⚡ Enable Maximum Performance RDP
         shell: pwsh
         run: |
           Write-Host "⚡ Configuring Maximum Performance RDP..."
           
-          # Enable RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
           
-          # Maximum performance settings
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionCount" -Value 999 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxIdleTime" -Value 0 -Force
-          
-          # Firewall
           netsh advfirewall firewall delete rule name="RDP-Max" 2>$null
           netsh advfirewall firewall add rule name="RDP-Max" dir=in action=allow protocol=TCP localport=3389
           
-          # Power settings - Maximum performance
           powercfg -change -standby-timeout-ac 0
           powercfg -change -hibernate-timeout-ac 0
-          powercfg -change -monitor-timeout-ac 0
-          powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c  # High Performance
-          
-          # Disable unnecessary services
-          Stop-Service -Name SysMain -Force
-          Set-Service -Name SysMain -StartupType Disabled
           
           Restart-Service -Name TermService -Force
-          Write-Host "✅ Maximum Performance RDP Configured!"
+          Write-Host "✅ RDP Configured!"
 
       # ============================================
-      # STEP 4: CREATE ULTRA USER
+      # STEP 5: CREATE USER
       # ============================================
       - name: 👤 Create Ultra Administrator
         shell: pwsh
         run: |
           Write-Host "👤 Creating Ultra Administrator User..."
           
-          # Maximum security password
           $charSet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+{}[]|;:<>,.?/'
           $password = -join ((1..32) | ForEach { Get-Random -Maximum $charSet.Length | ForEach-Object { $charSet[$_] } })
           
@@ -154,7 +166,7 @@ jobs:
           Write-Host "✅ Ultra User created"
 
       # ============================================
-      # STEP 5: INSTALL CHOCOLATEY
+      # STEP 6: INSTALL CHOCOLATEY
       # ============================================
       - name: 📦 Install Chocolatey
         shell: pwsh
@@ -166,109 +178,72 @@ jobs:
           Write-Host "✅ Chocolatey installed"
 
       # ============================================
-      # STEP 6: INSTALL ULTRA HEAVY TOOLS (500GB SPACE)
+      # STEP 7: INSTALL HEAVY TOOLS (Space Optimized)
       # ============================================
-      - name: 📦 Install Ultra Heavy Development Tools
+      - name: 📦 Install Heavy Development Tools
         if: github.event.inputs.install_heavy_tools == 'true'
         shell: pwsh
         run: |
           Write-Host "========================================="
-          Write-Host "📦 INSTALLING ULTRA HEAVY TOOLS"
+          Write-Host "📦 INSTALLING HEAVY TOOLS"
           Write-Host "========================================="
           
-          # Development Environments
-          Write-Host "🛠️ Installing Visual Studio 2022 Enterprise..."
-          choco install visualstudio2022enterprise visualstudio2022-workload-netweb visualstudio2022-workload-azure visualstudio2022-workload-data -y
+          # Check available space
+          $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
+          $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+          Write-Host "💾 Available Space: $freeGB GB"
           
-          Write-Host "🛠️ Installing VS Code + Extensions..."
-          choco install vscode -y
-          code --install-extension ms-python.python
-          code --install-extension ms-vscode.cpptools
-          code --install-extension ms-dotnettools.csdevkit
-          code --install-extension GitHub.copilot
+          if ($freeGB -lt 30) {
+            Write-Host "⚠️ Low space! Installing minimal tools..."
+            
+            # Minimal tools
+            choco install vscode git python312 nodejs -y
+            choco install chrome firefox -y
+            choco install 7zip notepadplusplus -y
+            
+          } else {
+            Write-Host "✅ Sufficient space! Installing full tools..."
+            
+            # Development (Space optimized)
+            Write-Host "🛠️ Installing VS Code..."
+            choco install vscode -y
+            
+            Write-Host "🐍 Installing Python 3.12..."
+            choco install python312 -y
+            
+            Write-Host "📦 Installing Node.js..."
+            choco install nodejs -y
+            
+            Write-Host "☕ Installing Java..."
+            choco install openjdk21 -y
+            
+            # Databases
+            Write-Host "🗄️ Installing MySQL..."
+            choco install mysql -y
+            
+            # DevOps
+            Write-Host "🐳 Installing Docker Desktop..."
+            choco install docker-desktop -y
+            
+            # Tools
+            Write-Host "🔧 Installing Tools..."
+            choco install git github-desktop putty filezilla -y
+            choco install googlechrome firefox -y
+            choco install 7zip notepadplusplus everything -y
+            
+            # Python packages
+            python -m pip install --upgrade pip
+            python -m pip install numpy pandas matplotlib jupyterlab
+          }
           
-          # Full Development Stack
-          Write-Host "🐍 Installing Python 3.12 + Libraries..."
-          choco install python312 -y
-          python -m pip install --upgrade pip
-          python -m pip install numpy pandas tensorflow torch torchvision jupyterlab
+          Write-Host "✅ Tools installed!"
           
-          Write-Host "☕ Installing Java + Build Tools..."
-          choco install openjdk21 maven gradle -y
-          
-          Write-Host "📦 Installing Node.js + Global Packages..."
-          choco install nodejs -y
-          npm install -g yarn pnpm typescript @angular/cli create-react-app next
-          
-          Write-Host "🔧 Installing .NET SDK 8.0..."
-          choco install dotnet-8.0-sdk -y
-          
-          # Databases
-          Write-Host "🗄️ Installing Databases..."
-          choco install mysql postgresql mongodb redis -y
-          
-          # DevOps & Containers
-          Write-Host "🐳 Installing Docker Desktop + Kubernetes..."
-          choco install docker-desktop kubernetes-helm kubectl -y
-          
-          # DevOps Tools
-          Write-Host "⚙️ Installing DevOps Tools..."
-          choco install git github-desktop azure-cli awscli terraform ansible -y
-          
-          # Networking & Security
-          Write-Host "🌐 Installing Networking Tools..."
-          choco install wireshark nmap putty filezilla openssl sysinternals -y
-          
-          # Media & Graphics
-          Write-Host "🎨 Installing Media Tools..."
-          choco install ffmpeg blender gimp inkscape vlc -y
-          
-          # System Utilities
-          Write-Host "🛠️ Installing System Utilities..."
-          choco install cpu-z gpu-z hwmonitor everything crystaldiskmark -y
-          
-          # Office & Browsers
-          Write-Host "📝 Installing Office & Browsers..."
-          choco install googlechrome firefox libreoffice-fresh -y
-          
-          # Additional Tools
-          Write-Host "🔧 Installing Additional Tools..."
-          choco install 7zip winrar notepadplusplus beyondcompare -y
-          
-          Write-Host "✅ All Ultra Heavy Tools Installed!"
-          
-          # Show disk usage after installation
+          # Show disk usage
           $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
           $usedGB = [math]::Round(($disk.Size - $disk.FreeSpace) / 1GB, 2)
           $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
           Write-Host "💾 Used Space: $usedGB GB"
           Write-Host "💾 Free Space: $freeGB GB"
-
-      # ============================================
-      # STEP 7: CONFIGURE MAX PERFORMANCE
-      # ============================================
-      - name: ⚡ Configure Maximum Performance
-        shell: pwsh
-        run: |
-          Write-Host "⚡ Configuring Maximum Performance..."
-          
-          # Virtual Memory - 64GB Page File
-          $computerSystem = Get-WmiObject -Class Win32_ComputerSystem
-          $computerSystem.AutomaticManagedPagefile = $false
-          $computerSystem.Put()
-          
-          $pageFile = Get-WmiObject -Class Win32_PageFileSetting
-          $pageFile.InitialSize = 32768
-          $pageFile.MaximumSize = 65536
-          $pageFile.Put()
-          
-          # Priority Control
-          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 38 -Force
-          
-          # Large System Cache
-          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "LargeSystemCache" -Value 1 -Force
-          
-          Write-Host "✅ Maximum Performance Configured!"
 
       # ============================================
       # STEP 8: INSTALL TAILSCALE
@@ -347,7 +322,7 @@ jobs:
           Write-Host "👤 USERNAME: UltraUser"
           Write-Host "🔑 PASSWORD: $env:RDP_PASSWORD"
           Write-Host ""
-          Write-Host "💾 DISK SPACE: 500 GB"
+          Write-Host "💾 DISK SPACE: Maximum Available"
           Write-Host "⚡ PERFORMANCE: MAXIMUM"
           Write-Host ""
           Write-Host "============================================================"
@@ -359,26 +334,11 @@ jobs:
           Write-Host "4. Username: UltraUser"
           Write-Host "5. Password: $env:RDP_PASSWORD"
           Write-Host "============================================================"
-          Write-Host ""
-          Write-Host "🛠️ INSTALLED TOOLS:"
-          Write-Host "   • VS 2022 Enterprise"
-          Write-Host "   • VS Code + AI Extensions"
-          Write-Host "   • Python 3.12 + ML Libraries"
-          Write-Host "   • Node.js + Angular/React/Next"
-          Write-Host "   • Java + Maven + Gradle"
-          Write-Host "   • .NET 8.0 SDK"
-          Write-Host "   • Docker Desktop + Kubernetes"
-          Write-Host "   • MySQL, PostgreSQL, MongoDB, Redis"
-          Write-Host "   • Azure CLI, AWS CLI, Terraform"
-          Write-Host "   • Wireshark, Nmap, OpenSSL"
-          Write-Host "   • Blender, GIMP, Inkscape"
-          Write-Host "   • LibreOffice, Chrome, Firefox"
-          Write-Host "============================================================"
 
       # ============================================
-      # STEP 11: KEEP ALIVE WITH STATUS
+      # STEP 11: KEEP ALIVE
       # ============================================
-      - name: 🔄 Keep Alive with Status Updates
+      - name: 🔄 Keep Alive
         shell: pwsh
         run: |
           Write-Host "🔄 Keeping ULTRA MAXIMUM RDP alive..."
@@ -386,7 +346,6 @@ jobs:
           $endTime = (Get-Date).AddHours(${{ github.event.inputs.duration }})
           $count = 0
           
-          # Get system stats
           while ((Get-Date) -lt $endTime) {
             $count++
             $ram = Get-WmiObject Win32_ComputerSystem
@@ -405,7 +364,6 @@ jobs:
             Write-Host "   ⏱️ Time: $(Get-Date -Format 'HH:mm:ss')"
             Write-Host "   📊 RAM: $ramUsed GB / $ramTotal GB used"
             Write-Host "   💾 DISK: $diskFree GB / $diskTotal GB free"
-            Write-Host "   ⚡ Status: MAXIMUM PERFORMANCE"
             Write-Host "============================================================"
             Write-Host "   💤 Press Ctrl+C to stop"
             Write-Host ""
