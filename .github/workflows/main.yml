@@ -4,9 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       duration:
-        description: 'Hours to keep running'
+        description: 'Hours to keep running (max 6)'
         type: number
         default: 6
+        maximum: 6
 
 jobs:
   simple-rdp:
@@ -21,19 +22,29 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "========================================="
-          Write-Host "⚡ SIMPLE RDP SYSTEM"
+          Write-Host "⚡ SYSTEM SPECIFICATIONS"
           Write-Host "========================================="
           
           $cpu = Get-WmiObject -Class Win32_Processor
-          Write-Host "CPU: $($cpu.Name)"
-          Write-Host "Cores: $($cpu.NumberOfCores)"
+          Write-Host ""
+          Write-Host "🖥️ CPU: $($cpu.Name)"
+          Write-Host "   🔢 Cores: $($cpu.NumberOfCores)"
           
           $ramGB = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB, 2)
-          Write-Host "RAM: $ramGB GB"
+          Write-Host ""
+          Write-Host "📊 RAM: $ramGB GB"
           
           $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
           $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-          Write-Host "Free Disk: $freeGB GB"
+          $totalGB = [math]::Round($disk.Size / 1GB, 2)
+          Write-Host ""
+          Write-Host "💾 DISK: $freeGB GB Free / $totalGB GB Total"
+          
+          $gpu = Get-WmiObject -Class Win32_VideoController
+          Write-Host ""
+          Write-Host "🎮 GPU: $($gpu.Name)"
+          
+          Write-Host ""
           Write-Host "========================================="
 
       # ============================================
@@ -42,16 +53,24 @@ jobs:
       - name: Enable RDP
         shell: pwsh
         run: |
-          Write-Host "Enabling RDP..."
+          Write-Host "🔧 Enabling RDP..."
           
+          # Enable RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
           
+          # Firewall
           netsh advfirewall firewall delete rule name="RDP" 2>$null
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
           
+          # Disable sleep
+          powercfg -change -standby-timeout-ac 0
+          powercfg -change -hibernate-timeout-ac 0
+          
+          # Restart RDP service
           Restart-Service -Name TermService -Force
-          Write-Host "RDP Enabled"
+          
+          Write-Host "✅ RDP Enabled"
 
       # ============================================
       # STEP 3: CREATE USER
@@ -59,24 +78,28 @@ jobs:
       - name: Create User
         shell: pwsh
         run: |
-          Write-Host "Creating User..."
+          Write-Host "👤 Creating User..."
           
+          # Generate strong password
           $charSet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+'
           $password = -join ((1..16) | ForEach { Get-Random -Maximum $charSet.Length | ForEach-Object { $charSet[$_] } })
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
           
+          # Remove existing user if any
           if (Get-LocalUser -Name "User" -ErrorAction SilentlyContinue) {
             Remove-LocalUser -Name "User" -Force
           }
           
-          New-LocalUser -Name "User" -Password $securePass -AccountNeverExpires
+          # Create user
+          New-LocalUser -Name "User" -Password $securePass -AccountNeverExpires -FullName "RDP User"
           Add-LocalGroupMember -Group "Administrators" -Member "User"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "User"
           
+          # Save credentials
           echo "RDP_USER=User" >> $env:GITHUB_ENV
           echo "RDP_PASSWORD=$password" >> $env:GITHUB_ENV
           
-          Write-Host "User Created"
+          Write-Host "✅ User Created"
 
       # ============================================
       # STEP 4: INSTALL TAILSCALE
@@ -84,7 +107,7 @@ jobs:
       - name: Install Tailscale
         shell: pwsh
         run: |
-          Write-Host "Installing Tailscale..."
+          Write-Host "📥 Installing Tailscale..."
           
           $url = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $installer = "$env:TEMP\tailscale.msi"
@@ -93,7 +116,7 @@ jobs:
           Start-Process msiexec.exe -ArgumentList "/i `"$installer`" /quiet /norestart" -Wait
           Remove-Item $installer -Force
           
-          Write-Host "Tailscale Installed"
+          Write-Host "✅ Tailscale Installed"
 
       # ============================================
       # STEP 5: CONNECT TAILSCALE
@@ -101,22 +124,49 @@ jobs:
       - name: Connect Tailscale
         shell: pwsh
         run: |
-          Write-Host "Connecting to Tailscale..."
+          Write-Host "🔗 Connecting to Tailscale..."
           
           $AUTH_KEY = "${{ secrets.TAILSCALE_AUTH_KEY }}"
           
+          # Check if auth key is set
           if ([string]::IsNullOrEmpty($AUTH_KEY)) {
-            Write-Host "❌ ERROR: TAILSCALE_AUTH_KEY not set!"
             Write-Host ""
-            Write-Host "Add secret: Settings → Secrets → TAILSCALE_AUTH_KEY"
+            Write-Host "❌ ERROR: TAILSCALE_AUTH_KEY is not set in GitHub Secrets!"
+            Write-Host ""
+            Write-Host "📝 HOW TO FIX:"
+            Write-Host "1. Go to: https://login.tailscale.com/admin/settings/keys"
+            Write-Host "2. Click 'Generate auth key'"
+            Write-Host "3. Enable: Reusable ✅ and Ephemeral ✅"
+            Write-Host "4. Copy the key (starts with 'tskey-auth-')"
+            Write-Host "5. Add as GitHub Secret:"
+            Write-Host "   Settings → Secrets → New secret"
+            Write-Host "   Name: TAILSCALE_AUTH_KEY"
+            Write-Host "   Value: tskey-auth-xxxxx"
+            Write-Host ""
+            exit 1
+          }
+          
+          # Check if key starts with tskey-auth-
+          if ($AUTH_KEY -notlike "tskey-auth-*") {
+            Write-Host ""
+            Write-Host "❌ ERROR: Invalid Tailscale key format!"
+            Write-Host ""
+            Write-Host "Your key: $AUTH_KEY"
+            Write-Host ""
+            Write-Host "📝 Correct format: tskey-auth-xxxxx"
+            Write-Host ""
+            Write-Host "Generate a new Auth Key (not API Key):"
+            Write-Host "https://login.tailscale.com/admin/settings/keys"
             Write-Host ""
             exit 1
           }
           
           $tailscale = "C:\Program Files\Tailscale\tailscale.exe"
           
+          # Connect to Tailscale
           & $tailscale up --authkey=$AUTH_KEY --hostname=simple-rdp --accept-routes --accept-dns
           
+          # Wait and get IP
           $ip = $null
           $retries = 0
           while (-not $ip -and $retries -lt 20) {
@@ -127,40 +177,65 @@ jobs:
           
           if ($ip) {
             echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
-            Write-Host "Connected! IP: $ip"
+            Write-Host ""
+            Write-Host "✅ Tailscale Connected!"
+            Write-Host "📡 IP: $ip"
           } else {
-            Write-Host "Failed to get IP"
+            Write-Host ""
+            Write-Host "❌ Failed to get Tailscale IP"
+            Write-Host ""
+            Write-Host "Checking Tailscale status:"
             & $tailscale status
             exit 1
           }
 
       # ============================================
-      # STEP 6: SHOW CONNECTION INFO
+      # STEP 6: SHOW CONNECTION INFO (MAIN IP DISPLAY)
       # ============================================
-      - name: Connection Info
+      - name: 🔥 CONNECTION INFO - IP HERE
         shell: pwsh
         run: |
+          $ip = $env:TAILSCALE_IP
+          $user = $env:RDP_USER
+          $pass = $env:RDP_PASSWORD
+          $cpu = (Get-WmiObject -Class Win32_Processor).Name
+          $ram = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB, 2)
+          
           Write-Host ""
-          Write-Host "========================================="
-          Write-Host "🔥 SIMPLE RDP - CONNECTION INFO"
-          Write-Host "========================================="
+          Write-Host "╔══════════════════════════════════════════════════════════════╗"
+          Write-Host "║                                                              ║"
+          Write-Host "║           🔥  RDP CONNECTION INFORMATION  🔥                  ║"
+          Write-Host "║                                                              ║"
+          Write-Host "╠══════════════════════════════════════════════════════════════╣"
+          Write-Host "║                                                              ║"
+          Write-Host "║   📡  TAILSCALE IP     : $ip"
+          Write-Host "║   👤  USERNAME         : $user"
+          Write-Host "║   🔑  PASSWORD         : $pass"
+          Write-Host "║                                                              ║"
+          Write-Host "╠══════════════════════════════════════════════════════════════╣"
+          Write-Host "║                                                              ║"
+          Write-Host "║   📝  HOW TO CONNECT:                                        ║"
+          Write-Host "║                                                              ║"
+          Write-Host "║   1. Install Tailscale: https://tailscale.com/download       ║"
+          Write-Host "║   2. Open Remote Desktop Connection                          ║"
+          Write-Host "║   3. Computer: $ip"
+          Write-Host "║   4. Username: $user"
+          Write-Host "║   5. Password: $pass"
+          Write-Host "║                                                              ║"
+          Write-Host "╠══════════════════════════════════════════════════════════════╣"
+          Write-Host "║                                                              ║"
+          Write-Host "║   ⚡  SYSTEM POWER:                                          ║"
+          Write-Host "║      CPU  : $cpu"
+          Write-Host "║      RAM  : $ram GB"
+          Write-Host "║                                                              ║"
+          Write-Host "╚══════════════════════════════════════════════════════════════╝"
           Write-Host ""
-          Write-Host "📡 IP: $env:TAILSCALE_IP"
-          Write-Host "👤 User: User"
-          Write-Host "🔑 Password: $env:RDP_PASSWORD"
           Write-Host ""
-          Write-Host "========================================="
-          Write-Host "HOW TO CONNECT:"
-          Write-Host "========================================="
-          Write-Host "1. Install Tailscale on your PC"
-          Write-Host "2. Remote Desktop → Computer: $env:TAILSCALE_IP"
-          Write-Host "3. Username: User"
-          Write-Host "4. Password: $env:RDP_PASSWORD"
+          Write-Host "📋  SAVE THESE CREDENTIALS:"
+          Write-Host "    IP  : $ip"
+          Write-Host "    User: $user"
+          Write-Host "    Pass: $pass"
           Write-Host ""
-          Write-Host "⚡ SYSTEM:"
-          Write-Host "   CPU: $(Get-WmiObject Win32_Processor).Name"
-          Write-Host "   RAM: $([math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory/1GB, 2)) GB"
-          Write-Host "========================================="
 
       # ============================================
       # STEP 7: KEEP ALIVE
@@ -168,15 +243,22 @@ jobs:
       - name: Keep Alive
         shell: pwsh
         run: |
-          Write-Host "Keeping RDP alive for ${{ github.event.inputs.duration }} hours..."
+          Write-Host "🔄 Keeping RDP alive for ${{ github.event.inputs.duration }} hours..."
+          Write-Host ""
+          Write-Host "📡 IP: $env:TAILSCALE_IP"
+          Write-Host "👤 User: $env:RDP_USER"
+          Write-Host ""
+          Write-Host "Press Ctrl+C to stop manually"
+          Write-Host ""
           
           $endTime = (Get-Date).AddHours(${{ github.event.inputs.duration }})
           $count = 0
           
           while ((Get-Date) -lt $endTime) {
             $count++
-            Write-Host "[$count] 🔥 RDP Active - IP: $env:TAILSCALE_IP"
-            Write-Host "    ⏱️ Time: $(Get-Date -Format 'HH:mm:ss')"
-            Write-Host "    Press Ctrl+C to stop"
+            Write-Host "[$count] 🔥 RDP Active - $(Get-Date -Format 'HH:mm:ss') - IP: $env:TAILSCALE_IP"
             Start-Sleep -Seconds 300
           }
+          
+          Write-Host ""
+          Write-Host "⏰ Time's up! Runner will stop."
